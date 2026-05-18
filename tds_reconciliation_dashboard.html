@@ -171,25 +171,38 @@
 </style>
 </head>
 <body>
-   <a href="index.html" class="home-btn">
-  ← Back to Home
+ <a href="index.html" class="home-btn">
+  <i class="fas fa-home"></i>
 </a>
+
+<!-- Font Awesome -->
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 
 <style>
 .home-btn{
   position:fixed;
   top:20px;
-  right:120px;
+  left:50%;
+  transform:translateX(-50%);
+  
   z-index:9999;
   text-decoration:none;
+
   background:#111827;
   color:#00d4ff;
   border:1px solid #1e2d45;
-  padding:10px 16px;
-  border-radius:10px;
-  font-family:'IBM Plex Mono', monospace;
-  font-size:12px;
-  font-weight:600;
+
+  width:52px;
+  height:52px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  border-radius:50%;
+
+  font-size:20px;
   transition:all .25s ease;
   box-shadow:0 4px 18px rgba(0,0,0,.25);
 }
@@ -197,8 +210,9 @@
 .home-btn:hover{
   background:#00d4ff;
   color:#000;
-  transform:translateY(-2px);
+  transform:translateX(-50%) translateY(-2px);
 }
+</style>
 <div class="wrapper">
 
   <header>
