@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hilabs Compliance Hub · Reconciliation Suite</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg:      #07090f;
+  --surface: #0d1117;
+  --border:  #1a2235;
+  --text:    #e8edf5;
+  --muted:   #4a5568;
+  --dimmed:  #8896a8;
+
+  --gst-a:   #00d4ff;
+  --gst-b:   #00ff9d;
+  --tds-a:   #6366f1;
+  --tds-b:   #38bdf8;
+  --pf-a:    #f97316;
+  --pf-b:    #fbbf24;
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Syne', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── GRID BACKGROUND ── */
+.grid-bg {
+  position: fixed; inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+}
+
+/* ── GLOW ORBS ── */
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+  animation: drift 12s ease-in-out infinite alternate;
+}
+.orb-1 { width:500px; height:500px; background:rgba(0,212,255,0.06); top:-100px; left:-100px; animation-delay:0s; }
+.orb-2 { width:400px; height:400px; background:rgba(99,102,241,0.07); top:40%; right:-80px; animation-delay:-4s; }
+.orb-3 { width:350px; height:350px; background:rgba(249,115,22,0.06); bottom:-80px; left:30%; animation-delay:-8s; }
+
+@keyframes drift {
+  from { transform: translate(0,0) scale(1); }
+  to   { transform: translate(30px,40px) scale(1.08); }
+}
+
+/* ── LAYOUT ── */
+.wrap {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 24px 80px;
+}
+
+/* ── TOPBAR ── */
+nav {
+  width: 100%; max-width: 1100px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 24px 0 0;
+  margin-bottom: 80px;
+  opacity: 0;
+  animation: slideDown 0.6s ease 0.1s forwards;
+}
+@keyframes slideDown {
+  from { opacity:0; transform:translateY(-16px); }
+  to   { opacity:1; transform:none; }
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+}
+.nav-mark {
+  width: 65px; height: 34px;
+  background: rgb(0,51,102);
+background: linear-gradient(159deg, rgba(0,51,102,1) 0%, rgba(15,82,186,1) 100%);
+  border-radius: 12px;
+  display: grid; place-items: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 15px; font-weight: 700; color: #fefefe;
+}
+.nav-name {
+  font-size: 15px; font-weight: 700; letter-spacing: -0.2px;
+  color: var(--text);
+}
+.nav-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; color: var(--muted);
+  border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 20px;
+  letter-spacing: 0.5px;
+}
+
+/* ── HERO ── */
+.hero {
+  text-align: center;
+  max-width: 680px;
+  margin-bottom: 72px;
+}
+.hero-eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 20px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.3s forwards;
+}
+.hero-eyebrow span {
+  display: inline-block;
+  width: 24px; height: 1px;
+  background: var(--muted);
+  vertical-align: middle;
+  margin: 0 10px;
+}
+.hero-title {
+  font-size: clamp(38px, 6vw, 64px);
+  font-weight: 800;
+  letter-spacing: -2.5px;
+  line-height: 1.05;
+  margin-bottom: 20px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.45s forwards;
+}
+.hero-title .line2 {
+  background: linear-gradient(90deg, var(--gst-a) 0%, var(--tds-a) 50%, var(--pf-b) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-sub {
+  font-size: 16px; font-weight: 400;
+  color: var(--dimmed); line-height: 1.65;
+  max-width: 520px; margin: 0 auto;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.6s forwards;
+}
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(20px); }
+  to   { opacity:1; transform:none; }
+}
+
+/* ── CARDS ── */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  width: 100%; max-width: 1100px;
+}
+
+.card {
+  position: relative;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 36px 32px 32px;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), border-color 0.3s ease, box-shadow 0.3s ease;
+  opacity: 0;
+}
+.card:nth-child(1) { animation: cardIn 0.7s cubic-bezier(0.34,1.2,0.64,1) 0.7s forwards; }
+.card:nth-child(2) { animation: cardIn 0.7s cubic-bezier(0.34,1.2,0.64,1) 0.85s forwards; }
+.card:nth-child(3) { animation: cardIn 0.7s cubic-bezier(0.34,1.2,0.64,1) 1.0s forwards; }
+
+@keyframes cardIn {
+  from { opacity:0; transform:translateY(40px) scale(0.96); }
+  to   { opacity:1; transform:translateY(0)    scale(1); }
+}
+
+.card:hover {
+  transform: translateY(-8px) scale(1.01);
+}
+.card.gst:hover  { border-color: var(--gst-a); box-shadow: 0 20px 60px rgba(0,212,255,0.12), 0 0 0 1px rgba(0,212,255,0.15); }
+.card.tds:hover  { border-color: var(--tds-a); box-shadow: 0 20px 60px rgba(99,102,241,0.14), 0 0 0 1px rgba(99,102,241,0.2); }
+.card.pf:hover   { border-color: var(--pf-a);  box-shadow: 0 20px 60px rgba(249,115,22,0.12), 0 0 0 1px rgba(249,115,22,0.18); }
+
+/* shine sweep on hover */
+.card::before {
+  content: '';
+  position: absolute; top:0; left:-100%; width:60%; height:100%;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.04) 50%, transparent 60%);
+  transition: left 0.5s ease;
+  pointer-events: none;
+}
+.card:hover::before { left: 140%; }
+
+/* corner glow */
+.card-glow {
+  position: absolute; top: -60px; right: -60px;
+  width: 180px; height: 180px;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.card.gst .card-glow { background: rgba(0,212,255,0.18); }
+.card.tds .card-glow { background: rgba(99,102,241,0.22); }
+.card.pf  .card-glow { background: rgba(249,115,22,0.18); }
+.card:hover .card-glow { opacity: 1; }
+
+/* ── CARD CONTENT ── */
+.card-icon {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  display: grid; place-items: center;
+  margin-bottom: 24px;
+  font-size: 24px;
+  flex-shrink: 0;
+  position: relative;
+  transition: transform 0.3s ease;
+}
+.card:hover .card-icon { transform: scale(1.1) rotate(-4deg); }
+.card.gst  .card-icon { background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(0,255,157,0.15)); border: 1px solid rgba(0,212,255,0.3); }
+.card.tds  .card-icon { background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(56,189,248,0.15)); border: 1px solid rgba(99,102,241,0.3); }
+.card.pf   .card-icon { background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(251,191,36,0.15)); border: 1px solid rgba(249,115,22,0.3); }
+
+.card-code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 2px; text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.card.gst  .card-code { color: var(--gst-a); }
+.card.tds  .card-code { color: var(--tds-a); }
+.card.pf   .card-code { color: var(--pf-a); }
+
+.card-title {
+  font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; line-height: 1.2;
+  margin-bottom: 10px;
+}
+.card-desc {
+  font-size: 13px; color: var(--dimmed);
+  line-height: 1.65; flex: 1;
+  margin-bottom: 28px;
+}
+
+/* pills */
+.card-pills { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 28px; }
+.pill {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; font-weight: 500;
+  padding: 3px 10px; border-radius: 20px;
+  border: 1px solid;
+}
+.card.gst  .pill { color: var(--gst-a); border-color: rgba(0,212,255,0.25); background: rgba(0,212,255,0.07); }
+.card.tds  .pill { color: var(--tds-b); border-color: rgba(99,102,241,0.25); background: rgba(99,102,241,0.07); }
+.card.pf   .pill { color: var(--pf-b);  border-color: rgba(249,115,22,0.25); background: rgba(249,115,22,0.08); }
+
+/* CTA */
+.card-cta {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.cta-label {
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.card.gst  .cta-label { color: var(--gst-a); }
+.card.tds  .cta-label { color: var(--tds-a); }
+.card.pf   .cta-label { color: var(--pf-a); }
+
+.cta-arrow {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 16px;
+  transition: transform 0.25s ease;
+}
+.card.gst  .cta-arrow { background: rgba(0,212,255,0.12); color: var(--gst-a); }
+.card.tds  .cta-arrow { background: rgba(99,102,241,0.12); color: var(--tds-a); }
+.card.pf   .cta-arrow { background: rgba(249,115,22,0.12); color: var(--pf-a); }
+.card:hover .cta-arrow { transform: translate(4px, -4px); }
+
+/* ── DIVIDER ── */
+.divider {
+  width: 100%; max-width: 1100px;
+  margin: 60px 0 48px;
+  display: flex; align-items: center; gap: 16px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 1.3s forwards;
+}
+.divider-line { flex:1; height:1px; background: var(--border); }
+.divider-text {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; letter-spacing: 2px; color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* ── INFO ROW ── */
+.info-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  width: 100%; max-width: 1100px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 1.4s forwards;
+}
+.info-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex; align-items: flex-start; gap: 14px;
+}
+.info-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+.info-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.info-desc  { font-size: 11px; color: var(--dimmed); line-height: 1.6; font-family: 'IBM Plex Mono', monospace; }
+
+/* ── FOOTER ── */
+footer {
+  position: relative; z-index: 1;
+  width: 100%;
+  text-align: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; color: var(--muted);
+  padding: 0;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 1.6s forwards;
+}
+
+/* ── FOOTER META ── */
+.footer-meta {
+  padding: 28px 24px 20px;
+  color: var(--dimmed);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+.footer-meta span { opacity: 0.5; }
+
+/* ── CREDITS WRAPPER ── */
+.footer-credits {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  margin-top: 4px;
+}
+
+/* top border glow line */
+.footer-credits::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0,149,255,0.0) 10%,
+    rgba(0,149,255,0.8) 30%,
+    #00d4ff 50%,
+    rgba(0,149,255,0.8) 70%,
+    rgba(0,149,255,0.0) 90%,
+    transparent 100%
+  );
+  animation: borderPulse 3s ease-in-out infinite alternate;
+}
+@keyframes borderPulse {
+  from { opacity: 0.6; }
+  to   { opacity: 1; filter: drop-shadow(0 0 6px #00d4ff); }
+}
+
+/* glowing blue background panel */
+.credits-panel {
+  position: relative;
+  background: linear-gradient(180deg,
+    rgba(0, 100, 200, 0.12) 0%,
+    rgba(0, 60, 140, 0.18) 50%,
+    rgba(0, 20, 80, 0.22) 100%
+  );
+  padding: 18px 0 20px;
+  border-bottom: 1px solid rgba(0, 149, 255, 0.15);
+}
+
+/* animated scan-line sweep */
+.credits-panel::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0, 180, 255, 0.06) 40%,
+    rgba(0, 212, 255, 0.12) 50%,
+    rgba(0, 180, 255, 0.06) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: scanSweep 4s linear infinite;
+  pointer-events: none;
+}
+@keyframes scanSweep {
+  from { background-position: -100% 0; }
+  to   { background-position: 200% 0; }
+}
+
+/* "DEVELOPED BY" label above the track */
+.credits-eyebrow {
+  font-size: 9px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(0, 180, 255, 0.5);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.credits-eyebrow::before,
+.credits-eyebrow::after {
+  content: '';
+  display: inline-block;
+  width: 40px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,180,255,0.4));
+}
+.credits-eyebrow::after {
+  background: linear-gradient(90deg, rgba(0,180,255,0.4), transparent);
+}
+
+/* scrolling track */
+.credits-track {
+  display: flex;
+  gap: 0;
+  animation: creditScroll 20s linear infinite;
+  white-space: nowrap;
+  will-change: transform;
+}
+.credits-track:hover { animation-play-state: paused; }
+
+@keyframes creditScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* each item in the ticker */
+.credits-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 32px;
+  font-size: 13px;
+  font-family: 'IBM Plex Mono', monospace;
+  color: rgba(100, 180, 255, 0.7);
+  letter-spacing: 0.5px;
+}
+
+/* "BUILT BY" micro label */
+.credits-label {
+  font-size: 9px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: rgba(0, 149, 255, 0.45);
+}
+
+/* the developer name — big, bold, glowing blue */
+.credits-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  background: linear-gradient(90deg,
+    #38bdf8 0%,
+    #00d4ff 30%,
+    #60a5fa 55%,
+    #a5f3fc 75%,
+    #00d4ff 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 250% auto;
+  animation: nameShimmer 3s linear infinite;
+  filter: drop-shadow(0 0 8px rgba(0, 212, 255, 0.6));
+}
+@keyframes nameShimmer {
+  from { background-position: 0% center; }
+  to   { background-position: 250% center; }
+}
+
+/* glowing diamond separator */
+.credits-sep {
+  width: 5px; height: 5px;
+  border-radius: 1px;
+  background: rgba(0, 149, 255, 0.5);
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.7);
+  transform: rotate(45deg);
+  display: inline-block;
+  flex-shrink: 0;
+  animation: sepPulse 2s ease-in-out infinite alternate;
+}
+@keyframes sepPulse {
+  from { opacity: 0.4; box-shadow: 0 0 4px rgba(0,212,255,0.4); }
+  to   { opacity: 1;   box-shadow: 0 0 10px rgba(0,212,255,0.9); }
+}
+
+/* heartbeat / star icon */
+.credits-icon {
+  display: inline-block;
+  font-style: normal;
+  animation: iconPop 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 4px rgba(0,212,255,0.7));
+}
+@keyframes iconPop {
+  0%,100% { transform: scale(1) rotate(0deg); }
+  20%     { transform: scale(1.3) rotate(-8deg); }
+  40%     { transform: scale(1) rotate(0deg); }
+}
+
+/* ── TICKER ── */
+.ticker-wrap {
+  width: 100%; overflow: hidden;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+  margin-bottom: 60px;
+  position: relative;
+  opacity: 0;
+  animation: fadeUp 0.5s ease 1.2s forwards;
+}
+.ticker-track {
+  display: flex; gap: 0;
+  animation: ticker 25s linear infinite;
+  white-space: nowrap;
+}
+.ticker-item {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; color: var(--muted);
+  padding: 0 32px;
+  display: flex; align-items: center; gap: 10px;
+}
+.ticker-dot { width: 4px; height: 4px; border-radius: 50%; }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ── PULSE BADGE ── */
+.pulse-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(0,212,255,0.06);
+  border: 1px solid rgba(0,212,255,0.18);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; color: var(--gst-a);
+  margin-bottom: 24px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease 0.2s forwards;
+}
+.pulse-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gst-b);
+  animation: pulse 2s ease infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity:1; transform: scale(1); }
+  50%      { opacity:0.5; transform: scale(0.7); }
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .cards { grid-template-columns: 1fr; }
+  .info-row { grid-template-columns: 1fr; }
+  .hero-title { font-size: 40px; }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<div class="wrap">
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">
+      <div class="nav-mark">  HiLabs</div>
+      <div class="nav-name"> Compliance Hub</div>
+    </div>
+    <div class="nav-tag">India · GST · TDS · PF</div>
+  </nav>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="pulse-badge">
+      <div class="pulse-dot"></div>
+      Reconciliation Suite · FY 2026-27
+    </div>
+    <div class="hero-eyebrow"><span></span>All compliance. One place.<span></span></div>
+    <h1 class="hero-title">
+      Reconcile.<br>
+      <span class="line2">Detect. Resolve.</span>
+    </h1>
+    <p class="hero-sub">
+      Three powerful dashboards to reconcile your GST, TDS and PF data — compare your books against government returns in seconds.
+    </p>
+  </div>
+
+  <!-- CARDS -->
+  <div class="cards">
+
+    <!-- GST -->
+    <a class="card gst" href="gstr2b_reconciliation_dashboard.html">
+      <div class="card-glow"></div>
+      <div class="card-icon">🧾</div>
+      <div class="card-code">GST · ITC</div>
+      <div class="card-title">GSTR-2B<br>Reconciliation</div>
+      <p class="card-desc">Match your purchase register against GSTR-2B auto-drafted ITC. Catch mismatches, missing invoices, and ineligible credits before filing.</p>
+      <div class="card-pills">
+        <span class="pill">GSTR-2B vs Books</span>
+        <span class="pill">ITC Eligibility</span>
+        <span class="pill">B2B / IMPG</span>
+        <span class="pill">Section 16(2)</span>
+      </div>
+      <div class="card-cta">
+        <span class="cta-label">Open Dashboard</span>
+        <div class="cta-arrow">↗</div>
+      </div>
+    </a>
+
+    <!-- TDS -->
+    <a class="card tds" href="pf_reconciliation_dashboard.html">
+      <div class="card-glow"></div>
+      <div class="card-icon">📊</div>
+      <div class="card-code">TDS · 26AS</div>
+      <div class="card-title">TDS Conso<br>Reconciliation</div>
+      <p class="card-desc">Reconcile your TDS books against Form 26AS / AIS. Track deductee-wise mismatches across 192B, 194C, 194J, 194I and more.</p>
+      <div class="card-pills">
+        <span class="pill">Conso vs Books</span>
+        <span class="pill">Form 26AS</span>
+        <span class="pill">194J / 194C</span>
+        <span class="pill">Challan Track</span>
+      </div>
+      <div class="card-cta">
+        <span class="cta-label">Open Dashboard</span>
+        <div class="cta-arrow">↗</div>
+      </div>
+    </a>
+
+    <!-- PF -->
+    <a class="card pf" href="tds_reconciliation_dashboard.html">
+      <div class="card-glow"></div>
+      <div class="card-icon">🏦</div>
+      <div class="card-code">PF · ECR</div>
+      <div class="card-title">PF Return<br>Reconciliation</div>
+      <p class="card-desc">Compare Zoho Payroll PF summary with ECR / Form 3A returns. Spot missing employees, wage mismatches, and EPS / EDLI variances.</p>
+      <div class="card-pills">
+        <span class="pill">Zoho vs ECR</span>
+        <span class="pill">Emp + Er PF</span>
+        <span class="pill">EPS / EDLI</span>
+        <span class="pill">UAN-wise</span>
+      </div>
+      <div class="card-cta">
+        <span class="cta-label">Open Dashboard</span>
+        <div class="cta-arrow">↗</div>
+      </div>
+    </a>
+
+  </div>
+
+  <!-- TICKER -->
+  <div class="divider" style="margin-top:56px; margin-bottom:0">
+    <div class="divider-line"></div>
+    <div class="divider-text">How it works</div>
+    <div class="divider-line"></div>
+  </div>
+
+  <div class="ticker-wrap" style="margin-top:0; margin-bottom:0; border-top:none;">
+    <div class="ticker-track">
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--gst-a)"></div>Upload your CSV file</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--gst-b)"></div>Instant visual reconciliation</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--tds-a)"></div>Filter by status · period · entity</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--tds-b)"></div>Identify mismatches in seconds</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--pf-a)"></div>Section-wise & component-wise drill-down</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--pf-b)"></div>No data leaves your browser</span>
+      <!-- duplicate for seamless loop -->
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--gst-a)"></div>Upload your CSV file</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--gst-b)"></div>Instant visual reconciliation</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--tds-a)"></div>Filter by status · period · entity</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--tds-b)"></div>Identify mismatches in seconds</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--pf-a)"></div>Section-wise & component-wise drill-down</span>
+      <span class="ticker-item"><div class="ticker-dot" style="background:var(--pf-b)"></div>No data leaves your browser</span>
+    </div>
+  </div>
+
+  <!-- INFO ROW -->
+  <div class="divider">
+    <div class="divider-line"></div>
+    <div class="divider-text">Features</div>
+    <div class="divider-line"></div>
+  </div>
+
+  <div class="info-row">
+    <div class="info-card">
+      <div class="info-icon">📁</div>
+      <div>
+        <div class="info-title">CSV Upload & Sample Data</div>
+        <div class="info-desc">Each dashboard ships with preloaded sample data. Drop in your own CSV to reconcile real data instantly.</div>
+      </div>
+    </div>
+    <div class="info-card">
+      <div class="info-icon">🔍</div>
+      <div>
+        <div class="info-title">Smart Filters</div>
+        <div class="info-desc">Slice by month · quarter · section · status · entity. Free-text search across all fields.</div>
+      </div>
+    </div>
+    <div class="info-card">
+      <div class="info-icon">🔒</div>
+      <div>
+        <div class="info-title">100% Browser-based</div>
+        <div class="info-desc">No server. No upload. All data stays on your device. Safe for sensitive financial records.</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<footer>
+  <div class="footer-meta">
+    Compliance Hub · Reconciliation Suite · FY 2026-27 · India<br>
+    <span>GST · TDS · PF · For internal use only · Data is indicative</span>
+  </div>
+
+  <!-- Animated blue developer credits strip -->
+  <div class="footer-credits">
+    <div class="credits-panel">
+      <div class="credits-eyebrow">Developed by</div>
+      <div class="credits-track">
+
+        <!-- ── SET 1 ── -->
+        <span class="credits-item">
+          <span class="credits-label">Built by</span>
+          <span class="credits-name">Nagamrutha</span>
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <i class="credits-icon">⚡</i>&nbsp;
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <span class="credits-label">Developer</span>
+          <span class="credits-name">Nagamrutha</span>
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <i class="credits-icon">✦</i>&nbsp;HiLabs Compliance Hub 
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <span class="credits-label">Crafted by</span>
+          <span class="credits-name">Nagamrutha</span>
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <i class="credits-icon">🛡️</i>&nbsp;100% browser-safe · no data leaves your device
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+
+        <!-- ── SET 2 (seamless loop duplicate) ── -->
+        <span class="credits-item">
+          <span class="credits-label">Built by</span>
+          <span class="credits-name">Nagamrutha</span>
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <i class="credits-icon">⚡</i>&nbsp;
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <span class="credits-label">Developer</span>
+          <span class="credits-name">Nagamrutha</span>
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <i class="credits-icon">✦</i>&nbsp;HiLabs Compliance Hub
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <span class="credits-label">Crafted by</span>
+          <span class="credits-name">Nagamrutha</span>
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+        <span class="credits-item">
+          <i class="credits-icon">🛡️</i>&nbsp;100% browser-safe · no data leaves your device
+        </span>
+        <span class="credits-item"><span class="credits-sep"></span></span>
+
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

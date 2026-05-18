@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GSTR-2B & Books Reconciliation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --accent2: #00ff9d;
+    --warn: #ffb800;
+    --danger: #ff4757;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --matched: #00ff9d;
+    --mismatch: #ffb800;
+    --missing-2b: #ff4757;
+    --missing-books: #a78bfa;
+    --eligible: #00ff9d;
+    --ineligible: #ff4757;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans',sans-serif; font-size:13px; min-height:100vh; }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background-image: linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px), linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
+    background-size:40px 40px; pointer-events:none; z-index:0;
+  }
+  .wrapper { position:relative; z-index:1; max-width:1500px; margin:0 auto; padding:24px; }
+
+  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; padding-bottom:18px; border-bottom:1px solid var(--border); }
+  .logo { display:flex; align-items:center; gap:12px; }
+  .logo-icon { width:40px; height:40px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:8px; display:grid; place-items:center; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:14px; color:#000; }
+  h1 { font-size:20px; font-weight:600; letter-spacing:-0.3px; }
+  h1 span { color:var(--accent); font-family:'IBM Plex Mono',monospace; }
+  .subtitle { color:var(--muted); font-size:12px; margin-top:2px; font-family:'IBM Plex Mono',monospace; }
+  .header-right { display:flex; align-items:center; gap:10px; }
+  .upload-btn { display:flex; align-items:center; gap:8px; background:var(--surface2); border:1px solid var(--border); color:var(--accent); padding:8px 16px; border-radius:6px; cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; transition:all 0.2s; }
+  .upload-btn:hover { background:rgba(0,212,255,0.1); border-color:var(--accent); }
+  #csvInput { display:none; }
+
+  /* Section tabs */
+  .section-tabs { display:flex; gap:4px; margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:4px; width:fit-content; }
+  .section-tab { padding:7px 20px; border-radius:7px; border:none; background:transparent; color:var(--muted); font-size:12px; font-family:'IBM Plex Mono',monospace; cursor:pointer; transition:all 0.2s; }
+  .section-tab.active { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+  .section-tab.active.recon { color:var(--accent); }
+  .section-tab.active.eligible { color:var(--eligible); }
+  .section-tab.active.ineligible { color:var(--ineligible); }
+
+  .section { display:none; }
+  .section.active { display:block; }
+
+  /* KPI row */
+  .kpi-grid { display:grid; gap:12px; margin-bottom:20px; }
+  .kpi-grid-5 { grid-template-columns:repeat(5,1fr); }
+  .kpi-grid-4 { grid-template-columns:repeat(4,1fr); }
+  .kpi { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; position:relative; overflow:hidden; }
+  .kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  .kpi.total::before { background:var(--accent); }
+  .kpi.matched::before { background:var(--matched); }
+  .kpi.mismatch::before { background:var(--mismatch); }
+  .kpi.missing-2b::before { background:var(--missing-2b); }
+  .kpi.missing-books::before { background:var(--missing-books); }
+  .kpi.eligible-kpi::before { background:var(--eligible); }
+  .kpi.ineligible-kpi::before { background:var(--ineligible); }
+  .kpi.warn-kpi::before { background:var(--warn); }
+  .kpi-label { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+  .kpi-value { font-size:28px; font-weight:600; font-family:'IBM Plex Mono',monospace; line-height:1; }
+  .kpi.total .kpi-value { color:var(--accent); }
+  .kpi.matched .kpi-value { color:var(--matched); }
+  .kpi.mismatch .kpi-value { color:var(--mismatch); }
+  .kpi.missing-2b .kpi-value { color:var(--missing-2b); }
+  .kpi.missing-books .kpi-value { color:var(--missing-books); }
+  .kpi.eligible-kpi .kpi-value { color:var(--eligible); }
+  .kpi.ineligible-kpi .kpi-value { color:var(--ineligible); }
+  .kpi.warn-kpi .kpi-value { color:var(--warn); }
+  .kpi-sub { font-size:11px; color:var(--muted); margin-top:4px; font-family:'IBM Plex Mono',monospace; }
+  .kpi-amount { font-size:13px; font-weight:600; font-family:'IBM Plex Mono',monospace; margin-top:6px; }
+
+  /* Charts */
+  .charts-row { display:grid; grid-template-columns:280px 1fr; gap:16px; margin-bottom:20px; }
+  .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; }
+  .card-title { font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:16px; }
+  .donut-wrap { display:flex; flex-direction:column; align-items:center; gap:16px; }
+  .legend { width:100%; display:flex; flex-direction:column; gap:8px; }
+  .legend-item { display:flex; align-items:center; justify-content:space-between; font-size:11px; }
+  .legend-left { display:flex; align-items:center; gap:8px; }
+  .legend-dot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+  .legend-count { font-family:'IBM Plex Mono',monospace; font-weight:600; }
+  .bar-group { display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+  .bar-row { display:grid; grid-template-columns:160px 1fr 120px; align-items:center; gap:12px; }
+  .bar-label { font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-track { height:20px; background:var(--surface2); border-radius:4px; overflow:hidden; display:flex; }
+  .bar-fill-2b { height:100%; background:linear-gradient(90deg,var(--accent),rgba(0,212,255,0.6)); border-radius:4px 0 0 4px; transition:width 0.6s ease; }
+  .bar-fill-books { height:100%; background:linear-gradient(90deg,rgba(0,255,157,0.6),var(--accent2)); transition:width 0.6s ease; }
+  .bar-values { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); text-align:right; }
+  .bar-values .diff { font-size:11px; font-weight:600; }
+  .bar-values .diff.over { color:var(--mismatch); }
+  .bar-values .diff.under { color:var(--missing-2b); }
+  .bar-values .diff.ok { color:var(--matched); }
+  .bar-legend-row { display:flex; gap:16px; margin-bottom:12px; }
+  .bar-legend-item { display:flex; align-items:center; gap:6px; font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted); }
+  .bar-legend-swatch { width:16px; height:8px; border-radius:2px; }
+
+  /* Eligibility split bar */
+  .split-bar-wrap { margin-bottom:20px; }
+  .split-bar-track { height:28px; background:var(--surface2); border-radius:8px; overflow:hidden; display:flex; border:1px solid var(--border); }
+  .split-bar-eligible { height:100%; background:linear-gradient(90deg,#00ff9d,rgba(0,255,157,0.7)); display:flex; align-items:center; justify-content:center; font-size:11px; font-family:'IBM Plex Mono',monospace; color:#000; font-weight:600; transition:width 0.8s ease; min-width:0; overflow:hidden; }
+  .split-bar-ineligible { height:100%; background:linear-gradient(90deg,rgba(255,71,87,0.7),#ff4757); display:flex; align-items:center; justify-content:center; font-size:11px; font-family:'IBM Plex Mono',monospace; color:#fff; font-weight:600; transition:width 0.8s ease; min-width:0; overflow:hidden; }
+  .split-bar-labels { display:flex; justify-content:space-between; margin-top:6px; }
+  .split-bar-label { font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--muted); }
+
+  /* Ineligible breakdown mini bars */
+  .reason-bars { display:flex; flex-direction:column; gap:8px; }
+  .reason-row { display:grid; grid-template-columns:220px 1fr 80px; align-items:center; gap:10px; }
+  .reason-label { font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .reason-track { height:14px; background:var(--surface2); border-radius:4px; overflow:hidden; }
+  .reason-fill { height:100%; background:linear-gradient(90deg,#ff4757,rgba(255,71,87,0.6)); border-radius:4px; transition:width 0.6s ease; }
+  .reason-amt { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--missing-2b); text-align:right; }
+
+  /* Filter / Table */
+  .filter-row { display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .filter-tab { padding:5px 14px; border-radius:20px; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:11px; font-family:'IBM Plex Mono',monospace; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:6px; }
+  .filter-tab.active, .filter-tab:hover { background:var(--surface2); color:var(--text); border-color:var(--accent); }
+  .filter-tab .dot { width:6px; height:6px; border-radius:50%; }
+  .search-box { margin-left:auto; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:5px 12px; color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:11px; outline:none; width:200px; transition:border-color 0.2s; }
+  .search-box:focus { border-color:var(--accent); }
+  .search-box::placeholder { color:var(--muted); }
+  .table-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .table-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); }
+  table { width:100%; border-collapse:collapse; }
+  thead th { padding:10px 14px; text-align:left; font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; background:var(--surface2); border-bottom:1px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; }
+  thead th:hover { color:var(--accent); }
+  tbody tr { border-bottom:1px solid rgba(30,45,69,0.5); transition:background 0.1s; }
+  tbody tr:hover { background:rgba(255,255,255,0.02); }
+  tbody td { padding:10px 14px; font-size:12px; vertical-align:middle; }
+  tbody td.mono { font-family:'IBM Plex Mono',monospace; font-size:11px; }
+  .status-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:10px; font-family:'IBM Plex Mono',monospace; font-weight:500; white-space:nowrap; }
+  .status-badge.matched { background:rgba(0,255,157,0.12); color:var(--matched); border:1px solid rgba(0,255,157,0.2); }
+  .status-badge.mismatch { background:rgba(255,184,0,0.12); color:var(--mismatch); border:1px solid rgba(255,184,0,0.2); }
+  .status-badge.missing-2b { background:rgba(255,71,87,0.12); color:var(--missing-2b); border:1px solid rgba(255,71,87,0.2); }
+  .status-badge.missing-books { background:rgba(167,139,250,0.12); color:var(--missing-books); border:1px solid rgba(167,139,250,0.2); }
+  .itc-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:20px; font-size:10px; font-family:'IBM Plex Mono',monospace; font-weight:500; }
+  .itc-badge.eligible { background:rgba(0,255,157,0.1); color:var(--eligible); border:1px solid rgba(0,255,157,0.2); }
+  .itc-badge.ineligible { background:rgba(255,71,87,0.1); color:var(--ineligible); border:1px solid rgba(255,71,87,0.2); }
+  .itc-badge.na { background:rgba(100,116,139,0.1); color:var(--muted); border:1px solid rgba(100,116,139,0.2); }
+  .diff-cell { font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; }
+  .diff-cell.over { color:var(--mismatch); }
+  .diff-cell.under { color:var(--missing-2b); }
+  .diff-cell.ok { color:var(--matched); }
+  .pagination { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; border-top:1px solid var(--border); font-size:11px; color:var(--muted); font-family:'IBM Plex Mono',monospace; }
+  .page-btns { display:flex; gap:4px; }
+  .page-btn { padding:4px 10px; border-radius:4px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:11px; transition:all 0.2s; }
+  .page-btn:hover, .page-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(0,212,255,0.08); }
+  .empty-state { padding:60px; text-align:center; color:var(--muted); }
+  .empty-state .icon { font-size:40px; margin-bottom:12px; }
+  .empty-state h3 { font-size:15px; margin-bottom:6px; color:var(--text); }
+  .toast { position:fixed; bottom:24px; right:24px; background:var(--surface2); border:1px solid var(--accent); color:var(--accent); padding:10px 18px; border-radius:8px; font-size:12px; font-family:'IBM Plex Mono',monospace; transform:translateY(80px); opacity:0; transition:all 0.3s; z-index:100; }
+  .toast.show { transform:translateY(0); opacity:1; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .animate-in { animation:fadeIn 0.4s ease forwards; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">2B</div>
+      <div>
+        <h1>GSTR-<span>2B</span> vs Books Reconciliation</h1>
+        <div class="subtitle">// ITC mismatch · eligible/ineligible analysis</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <label class="upload-btn" for="csvInput">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        Upload CSV
+      </label>
+      <input type="file" id="csvInput" accept=".csv">
+    </div>
+  </header>
+
+  <!-- Section Tabs -->
+  <div class="section-tabs">
+    <button class="section-tab active recon" onclick="switchSection('recon',this)">⇄ Reconciliation</button>
+    <button class="section-tab eligible" onclick="switchSection('eligible',this)">✓ Eligible ITC</button>
+    <button class="section-tab ineligible" onclick="switchSection('ineligible',this)">✗ Ineligible ITC</button>
+  </div>
+
+  <!-- ══════════════ SECTION: RECONCILIATION ══════════════ -->
+  <div class="section active" id="sec-recon">
+    <div class="kpi-grid kpi-grid-5">
+      <div class="kpi total"><div class="kpi-label">Total Invoices</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-sub">unique pairs</div></div>
+      <div class="kpi matched"><div class="kpi-label">✓ Matched</div><div class="kpi-value" id="kpiMatched">—</div><div class="kpi-sub">fully reconciled</div></div>
+      <div class="kpi mismatch"><div class="kpi-label">⚠ Mismatch</div><div class="kpi-value" id="kpiMismatch">—</div><div class="kpi-sub">value difference</div></div>
+      <div class="kpi missing-2b"><div class="kpi-label">✗ Not in 2B</div><div class="kpi-value" id="kpiMissing2B">—</div><div class="kpi-sub">only in books</div></div>
+      <div class="kpi missing-books"><div class="kpi-label">◈ Not in Books</div><div class="kpi-value" id="kpiMissingBooks">—</div><div class="kpi-sub">only in 2B</div></div>
+    </div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="card-title">// Status Breakdown</div>
+        <div class="donut-wrap">
+          <canvas id="donut" width="160" height="160"></canvas>
+          <div class="legend" id="donutLegend"></div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">// Tax Value — GSTR-2B vs Books (Top Suppliers)</div>
+        <div class="bar-legend-row">
+          <div class="bar-legend-item"><div class="bar-legend-swatch" style="background:var(--accent)"></div> GSTR-2B</div>
+          <div class="bar-legend-item"><div class="bar-legend-swatch" style="background:var(--accent2)"></div> Books</div>
+        </div>
+        <div class="bar-group" id="barGroup"><div class="empty-state" style="padding:30px"><div>Upload a CSV to see comparison</div></div></div>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-tab active" onclick="setFilter('all',this)"><span class="dot" style="background:var(--accent)"></span> All</button>
+      <button class="filter-tab" onclick="setFilter('Matched',this)"><span class="dot" style="background:var(--matched)"></span> Matched</button>
+      <button class="filter-tab" onclick="setFilter('Mismatch',this)"><span class="dot" style="background:var(--mismatch)"></span> Mismatch</button>
+      <button class="filter-tab" onclick="setFilter('Missing in 2B',this)"><span class="dot" style="background:var(--missing-2b)"></span> Missing in 2B</button>
+      <button class="filter-tab" onclick="setFilter('Missing in Books',this)"><span class="dot" style="background:var(--missing-books)"></span> Missing in Books</button>
+      <input class="search-box" type="text" placeholder="Search supplier / invoice..." id="searchBox" oninput="renderReconTable()">
+    </div>
+
+    <div class="table-card">
+      <div class="table-header">
+        <div class="card-title" style="margin:0">// Reconciliation Detail</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)" id="rowCount">0 rows</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortBy('supplierName')">Supplier</th>
+              <th onclick="sortBy('invoiceNo')">Invoice No</th>
+              <th onclick="sortBy('invoiceDate')">Date</th>
+              <th onclick="sortBy('taxableValue2B')">Taxable (2B) ₹</th>
+              <th onclick="sortBy('taxableValueBooks')">Taxable (Books) ₹</th>
+              <th onclick="sortBy('totalTax2B')">Tax (2B) ₹</th>
+              <th onclick="sortBy('totalTaxBooks')">Tax (Books) ₹</th>
+              <th onclick="sortBy('taxDiff')">Tax Diff ₹</th>
+              <th onclick="sortBy('itcEligibility')">ITC Eligibility</th>
+              <th onclick="sortBy('status')">Recon Status</th>
+            </tr>
+          </thead>
+          <tbody id="reconTableBody">
+            <tr><td colspan="10"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3><p>Upload a CSV file to begin</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div id="reconPagInfo">Showing 0–0 of 0</div>
+        <div class="page-btns" id="reconPageBtns"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SECTION: ELIGIBLE ITC ══════════════ -->
+  <div class="section" id="sec-eligible">
+    <div class="kpi-grid kpi-grid-4">
+      <div class="kpi eligible-kpi"><div class="kpi-label">Eligible Invoices</div><div class="kpi-value" id="kpiEligibleCount">—</div><div class="kpi-sub">in books</div></div>
+      <div class="kpi eligible-kpi"><div class="kpi-label">Total Taxable Value</div><div class="kpi-value" id="kpiEligibleTaxable">—</div><div class="kpi-sub">₹ eligible inputs</div></div>
+      <div class="kpi eligible-kpi"><div class="kpi-label">Total ITC Available</div><div class="kpi-value" id="kpiEligibleTax">—</div><div class="kpi-sub">₹ claimable tax</div></div>
+      <div class="kpi warn-kpi"><div class="kpi-label">ITC at Risk</div><div class="kpi-value" id="kpiEligibleAtRisk">—</div><div class="kpi-sub">₹ missing in 2B</div></div>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-tab active" onclick="setEligFilter('all',this)"><span class="dot" style="background:var(--accent)"></span> All</button>
+      <button class="filter-tab" onclick="setEligFilter('Matched',this)"><span class="dot" style="background:var(--matched)"></span> Matched</button>
+      <button class="filter-tab" onclick="setEligFilter('Mismatch',this)"><span class="dot" style="background:var(--mismatch)"></span> Mismatch</button>
+      <button class="filter-tab" onclick="setEligFilter('Missing in 2B',this)"><span class="dot" style="background:var(--missing-2b)"></span> Missing in 2B</button>
+      <input class="search-box" type="text" placeholder="Search supplier..." id="eligSearchBox" oninput="renderEligTable()">
+    </div>
+
+    <div class="table-card">
+      <div class="table-header">
+        <div class="card-title" style="margin:0">// Eligible ITC — Invoice Detail</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--eligible)" id="eligRowCount">0 rows</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Supplier</th>
+              <th>Invoice No</th>
+              <th>Date</th>
+              <th>Taxable Value ₹</th>
+              <th>IGST ₹</th>
+              <th>CGST ₹</th>
+              <th>SGST ₹</th>
+              <th>Total ITC ₹</th>
+              <th>Recon Status</th>
+            </tr>
+          </thead>
+          <tbody id="eligTableBody">
+            <tr><td colspan="9"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div id="eligPagInfo">Showing 0–0 of 0</div>
+        <div class="page-btns" id="eligPageBtns"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SECTION: INELIGIBLE ITC ══════════════ -->
+  <div class="section" id="sec-ineligible">
+    <div class="kpi-grid kpi-grid-4">
+      <div class="kpi ineligible-kpi"><div class="kpi-label">Ineligible Invoices</div><div class="kpi-value" id="kpiIneligCount">—</div><div class="kpi-sub">in books</div></div>
+      <div class="kpi ineligible-kpi"><div class="kpi-label">Blocked ITC</div><div class="kpi-value" id="kpiIneligTax">—</div><div class="kpi-sub">₹ cannot claim</div></div>
+      <div class="kpi ineligible-kpi"><div class="kpi-label">Taxable Value</div><div class="kpi-value" id="kpiIneligTaxable">—</div><div class="kpi-sub">₹ ineligible inputs</div></div>
+      <div class="kpi warn-kpi"><div class="kpi-label">Unique Reasons</div><div class="kpi-value" id="kpiIneligReasons">—</div><div class="kpi-sub">Sec 17(5) categories</div></div>
+    </div>
+
+    <!-- Split bar -->
+    <div class="chart-card split-bar-wrap" style="margin-bottom:20px">
+      <div class="card-title">// Eligible vs Ineligible ITC Split (by Tax Amount)</div>
+      <div class="split-bar-track" id="splitBar">
+        <div class="split-bar-eligible" style="width:50%">50%</div>
+        <div class="split-bar-ineligible" style="width:50%">50%</div>
+      </div>
+      <div class="split-bar-labels">
+        <span class="split-bar-label" id="splitEligLabel" style="color:var(--eligible)">Eligible: —</span>
+        <span class="split-bar-label" id="splitIneligLabel" style="color:var(--ineligible)">Ineligible: —</span>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="card-title">// Ineligibility Reason Breakdown</div>
+        <div class="reason-bars" id="reasonBars"><div style="color:var(--muted);font-size:12px">No data</div></div>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">// Ineligible ITC — Invoice List</div>
+        <div style="overflow-x:auto;max-height:280px;overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th>Invoice No</th>
+                <th>Tax ₹</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="ineligMiniTable">
+              <tr><td colspan="4"><div class="empty-state" style="padding:20px"><div>No data</div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /wrapper -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allRows = [];
+let currentFilter = 'all';
+let currentEligFilter = 'all';
+let sortKey = '', sortDir = 1;
+let reconPage = 1, eligPage = 1;
+const PAGE = 10;
+
+// ── Section switching ──────────────────────────────────────────────────────
+function switchSection(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.section-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+// ── CSV Upload ─────────────────────────────────────────────────────────────
+document.getElementById('csvInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try { parseAndProcess(ev.target.result); showToast('✓ Loaded: ' + file.name); }
+    catch(err) { showToast('✗ Error: ' + err.message); }
+  };
+  reader.readAsText(file);
+});
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const vals = line.split(',');
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] || '').trim());
+    return obj;
+  });
+}
+
+function parseAndProcess(csvText) {
+  const rows = parseCSV(csvText);
+  const groups = {};
+  rows.forEach(r => {
+    const key = `${r['GSTIN']}|${r['Invoice No']}`;
+    if (!groups[key]) groups[key] = {};
+    const src = r['Source'];
+    if (src === 'GSTR-2B') groups[key]['2B'] = r;
+    else if (src === 'Books') groups[key]['Books'] = r;
+  });
+
+  allRows = Object.entries(groups).map(([key, g]) => {
+    const b = g['2B'], bk = g['Books'];
+    const ref = b || bk;
+    const taxableValue2B = b ? +b['Taxable Value'] : null;
+    const taxableValueBooks = bk ? +bk['Taxable Value'] : null;
+    const igst2B = b ? +b['IGST'] : null, cgst2B = b ? +b['CGST'] : null, sgst2B = b ? +b['SGST'] : null;
+    const igstBk = bk ? +bk['IGST'] : null, cgstBk = bk ? +bk['CGST'] : null, sgstBk = bk ? +bk['SGST'] : null;
+    const totalTax2B = b ? (igst2B + cgst2B + sgst2B) : null;
+    const totalTaxBooks = bk ? (igstBk + cgstBk + sgstBk) : null;
+
+    let status;
+    if (b && bk) {
+      const td = Math.abs(totalTax2B - totalTaxBooks), vd = Math.abs(taxableValue2B - taxableValueBooks);
+      status = (td < 1 && vd < 1) ? 'Matched' : 'Mismatch';
+    } else if (!b) { status = 'Missing in 2B'; }
+    else { status = 'Missing in Books'; }
+
+    const taxDiff = (totalTax2B !== null && totalTaxBooks !== null) ? totalTaxBooks - totalTax2B : null;
+    const itcEligibility = bk ? (bk['ITC Eligibility'] || 'Eligible') : null;
+    const ineligibilityReason = bk ? (bk['Ineligibility Reason'] || '') : '';
+
+    return {
+      gstin: ref['GSTIN'], supplierName: ref['Supplier Name'],
+      invoiceNo: ref['Invoice No'], invoiceDate: ref['Invoice Date'],
+      taxableValue2B, taxableValueBooks,
+      igst2B, cgst2B, sgst2B, igstBk, cgstBk, sgstBk,
+      totalTax2B, totalTaxBooks, taxDiff, status,
+      itcEligibility, ineligibilityReason,
+      placeOfSupply: ref['Place of Supply'],
+    };
+  });
+
+  updateAll();
+}
+
+function updateAll() {
+  updateReconKPIs();
+  renderDonut();
+  renderBars();
+  renderReconTable();
+  updateEligibleKPIs();
+  renderEligTable();
+  updateIneligibleSection();
+}
+
+// ── Reconciliation KPIs ────────────────────────────────────────────────────
+function updateReconKPIs() {
+  const c = { Matched:0, Mismatch:0, 'Missing in 2B':0, 'Missing in Books':0 };
+  allRows.forEach(r => c[r.status]++);
+  document.getElementById('kpiTotal').textContent = allRows.length;
+  document.getElementById('kpiMatched').textContent = c['Matched'];
+  document.getElementById('kpiMismatch').textContent = c['Mismatch'];
+  document.getElementById('kpiMissing2B').textContent = c['Missing in 2B'];
+  document.getElementById('kpiMissingBooks').textContent = c['Missing in Books'];
+}
+
+// ── Eligible KPIs ──────────────────────────────────────────────────────────
+function updateEligibleKPIs() {
+  const eligRows = allRows.filter(r => r.itcEligibility === 'Eligible');
+  const totalTaxable = eligRows.reduce((s, r) => s + (r.taxableValueBooks || 0), 0);
+  const totalTax = eligRows.reduce((s, r) => s + (r.totalTaxBooks || 0), 0);
+  const atRisk = eligRows.filter(r => r.status === 'Missing in 2B').reduce((s, r) => s + (r.totalTaxBooks || 0), 0);
+  document.getElementById('kpiEligibleCount').textContent = eligRows.length;
+  document.getElementById('kpiEligibleTaxable').textContent = '₹' + fmt(totalTaxable);
+  document.getElementById('kpiEligibleTax').textContent = '₹' + fmt(totalTax);
+  document.getElementById('kpiEligibleAtRisk').textContent = '₹' + fmt(atRisk);
+}
+
+// ── Ineligible section ─────────────────────────────────────────────────────
+function updateIneligibleSection() {
+  const ineligRows = allRows.filter(r => r.itcEligibility === 'Ineligible');
+  const eligRows = allRows.filter(r => r.itcEligibility === 'Eligible');
+  const totalIneligTax = ineligRows.reduce((s, r) => s + (r.totalTaxBooks || 0), 0);
+  const totalEligTax = eligRows.reduce((s, r) => s + (r.totalTaxBooks || 0), 0);
+  const totalIneligTaxable = ineligRows.reduce((s, r) => s + (r.taxableValueBooks || 0), 0);
+  const reasons = [...new Set(ineligRows.map(r => r.ineligibilityReason).filter(Boolean))];
+
+  document.getElementById('kpiIneligCount').textContent = ineligRows.length;
+  document.getElementById('kpiIneligTax').textContent = '₹' + fmt(totalIneligTax);
+  document.getElementById('kpiIneligTaxable').textContent = '₹' + fmt(totalIneligTaxable);
+  document.getElementById('kpiIneligReasons').textContent = reasons.length;
+
+  // Split bar
+  const total = totalEligTax + totalIneligTax || 1;
+  const eligPct = (totalEligTax / total * 100).toFixed(1);
+  const ineligPct = (totalIneligTax / total * 100).toFixed(1);
+  document.querySelector('.split-bar-eligible').style.width = eligPct + '%';
+  document.querySelector('.split-bar-eligible').textContent = eligPct > 8 ? eligPct + '%' : '';
+  document.querySelector('.split-bar-ineligible').style.width = ineligPct + '%';
+  document.querySelector('.split-bar-ineligible').textContent = ineligPct > 8 ? ineligPct + '%' : '';
+  document.getElementById('splitEligLabel').textContent = 'Eligible: ₹' + fmt(totalEligTax);
+  document.getElementById('splitIneligLabel').textContent = 'Ineligible: ₹' + fmt(totalIneligTax);
+
+  // Reason breakdown bars
+  const reasonMap = {};
+  ineligRows.forEach(r => {
+    const k = r.ineligibilityReason || 'Unknown';
+    if (!reasonMap[k]) reasonMap[k] = 0;
+    reasonMap[k] += r.totalTaxBooks || 0;
+  });
+  const maxR = Math.max(...Object.values(reasonMap)) || 1;
+  document.getElementById('reasonBars').innerHTML = Object.entries(reasonMap)
+    .sort((a,b) => b[1]-a[1])
+    .map(([reason, amt]) => `
+      <div class="reason-row">
+        <div class="reason-label" title="${reason}">${reason}</div>
+        <div class="reason-track"><div class="reason-fill" style="width:${(amt/maxR*100).toFixed(1)}%"></div></div>
+        <div class="reason-amt">₹${fmt(amt)}</div>
+      </div>
+    `).join('') || '<div style="color:var(--muted);font-size:12px">No ineligible entries</div>';
+
+  // Mini table
+  document.getElementById('ineligMiniTable').innerHTML = ineligRows.map(r => `
+    <tr>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.supplierName}">${r.supplierName}</td>
+      <td class="mono" style="font-size:10px">${r.invoiceNo}</td>
+      <td class="mono" style="color:var(--ineligible)">₹${fmt(r.totalTaxBooks)}</td>
+      <td style="font-size:10px;color:var(--muted)">${r.ineligibilityReason}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="4"><div class="empty-state" style="padding:20px">No ineligible entries</div></td></tr>';
+}
+
+// ── Donut ──────────────────────────────────────────────────────────────────
+function renderDonut() {
+  const counts = { Matched:0, Mismatch:0, 'Missing in 2B':0, 'Missing in Books':0 };
+  allRows.forEach(r => counts[r.status]++);
+  const total = allRows.length || 1;
+  const data = [
+    { label:'Matched', count:counts['Matched'], color:'#00ff9d' },
+    { label:'Mismatch', count:counts['Mismatch'], color:'#ffb800' },
+    { label:'Missing in 2B', count:counts['Missing in 2B'], color:'#ff4757' },
+    { label:'Missing in Books', count:counts['Missing in Books'], color:'#a78bfa' },
+  ];
+  const canvas = document.getElementById('donut');
+  const ctx = canvas.getContext('2d');
+  const size = 160; canvas.width = size; canvas.height = size;
+  const cx = size/2, cy = size/2, r = 65, inner = 42;
+  ctx.clearRect(0,0,size,size);
+  let start = -Math.PI/2;
+  data.forEach(d => {
+    if (!d.count) return;
+    const angle = (d.count/total) * 2 * Math.PI;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,start,start+angle); ctx.closePath();
+    ctx.fillStyle = d.color; ctx.fill(); start += angle;
+  });
+  ctx.beginPath(); ctx.arc(cx,cy,inner,0,2*Math.PI); ctx.fillStyle='#111827'; ctx.fill();
+  ctx.fillStyle='#e2e8f0'; ctx.font='bold 22px IBM Plex Mono'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(total,cx,cy-6); ctx.font='10px IBM Plex Mono'; ctx.fillStyle='#64748b'; ctx.fillText('invoices',cx,cy+12);
+  document.getElementById('donutLegend').innerHTML = data.map(d => `
+    <div class="legend-item">
+      <div class="legend-left"><div class="legend-dot" style="background:${d.color}"></div><span style="color:#94a3b8">${d.label}</span></div>
+      <span class="legend-count" style="color:${d.color}">${d.count}</span>
+    </div>`).join('');
+}
+
+// ── Bar chart ──────────────────────────────────────────────────────────────
+function renderBars() {
+  const suppliers = {};
+  allRows.forEach(r => {
+    if (!suppliers[r.supplierName]) suppliers[r.supplierName] = { tax2B:0, taxBooks:0 };
+    if (r.totalTax2B !== null) suppliers[r.supplierName].tax2B += r.totalTax2B;
+    if (r.totalTaxBooks !== null) suppliers[r.supplierName].taxBooks += r.totalTaxBooks;
+  });
+  const sorted = Object.entries(suppliers).sort((a,b) => (b[1].tax2B||b[1].taxBooks)-(a[1].tax2B||a[1].taxBooks)).slice(0,6);
+  const maxVal = Math.max(...sorted.flatMap(([,v]) => [v.tax2B,v.taxBooks])) || 1;
+  document.getElementById('barGroup').innerHTML = sorted.map(([name, v]) => {
+    const w2B = (v.tax2B/maxVal*100).toFixed(1), wBk = (v.taxBooks/maxVal*100).toFixed(1);
+    const diff = v.taxBooks - v.tax2B;
+    const dc = diff > 0.5 ? 'over' : diff < -0.5 ? 'under' : 'ok';
+    const ds = diff === 0 ? '✓ Match' : (diff>0?'+':'') + '₹' + fmt(diff);
+    return `<div class="bar-row">
+      <div class="bar-label" title="${name}">${name.split(' ').slice(0,3).join(' ')}</div>
+      <div class="bar-track">
+        <div class="bar-fill-2b" style="width:${w2B}%"></div>
+        <div style="width:2px;background:var(--bg)"></div>
+        <div class="bar-fill-books" style="width:${wBk}%"></div>
+      </div>
+      <div class="bar-values">
+        <div style="color:var(--accent)">₹${fmt(v.tax2B)}</div>
+        <div style="color:var(--accent2)">₹${fmt(v.taxBooks)}</div>
+        <div class="diff ${dc}">${ds}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Reconciliation Table ───────────────────────────────────────────────────
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('#sec-recon .filter-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  reconPage = 1; renderReconTable();
+}
+
+function sortBy(key) {
+  if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+  renderReconTable();
+}
+
+function renderReconTable() {
+  const search = document.getElementById('searchBox').value.toLowerCase();
+  let rows = allRows.filter(r => {
+    const mf = currentFilter === 'all' || r.status === currentFilter;
+    const ms = !search || r.supplierName.toLowerCase().includes(search) || r.invoiceNo.toLowerCase().includes(search) || r.gstin.toLowerCase().includes(search);
+    return mf && ms;
+  });
+  if (sortKey) rows.sort((a,b) => { const av=a[sortKey],bv=b[sortKey]; if(av===null)return 1; if(bv===null)return -1; return av>bv?sortDir:av<bv?-sortDir:0; });
+  renderPagedTable(rows, 'reconTableBody', 'reconPagInfo', 'reconPageBtns', 'rowCount', reconPage,
+    r => {
+      const ds = r.taxDiff!==null ? (Math.abs(r.taxDiff)<1?'—':(r.taxDiff>0?'+':'')+'₹'+fmt(r.taxDiff)) : '—';
+      const dc = r.taxDiff!==null ? (r.taxDiff>0.5?'over':r.taxDiff<-0.5?'under':'ok') : '';
+      const sm = { 'Matched':'matched','Mismatch':'mismatch','Missing in 2B':'missing-2b','Missing in Books':'missing-books' };
+      const ic = { 'Matched':'✓','Mismatch':'⚠','Missing in 2B':'✗','Missing in Books':'◈' };
+      const itcCls = r.itcEligibility === 'Eligible' ? 'eligible' : r.itcEligibility === 'Ineligible' ? 'ineligible' : 'na';
+      const itcLabel = r.itcEligibility || '—';
+      const itcIcon = r.itcEligibility === 'Eligible' ? '✓' : r.itcEligibility === 'Ineligible' ? '✗' : '—';
+      return `<tr class="animate-in">
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.supplierName}">${r.supplierName}</td>
+        <td class="mono">${r.invoiceNo}</td>
+        <td class="mono">${r.invoiceDate}</td>
+        <td class="mono">${r.taxableValue2B!==null?'₹'+fmt(r.taxableValue2B):'<span style="color:var(--muted)">—</span>'}</td>
+        <td class="mono">${r.taxableValueBooks!==null?'₹'+fmt(r.taxableValueBooks):'<span style="color:var(--muted)">—</span>'}</td>
+        <td class="mono">${r.totalTax2B!==null?'₹'+fmt(r.totalTax2B):'<span style="color:var(--muted)">—</span>'}</td>
+        <td class="mono">${r.totalTaxBooks!==null?'₹'+fmt(r.totalTaxBooks):'<span style="color:var(--muted)">—</span>'}</td>
+        <td class="diff-cell ${dc}">${ds}</td>
+        <td><span class="itc-badge ${itcCls}">${itcIcon} ${itcLabel}</span></td>
+        <td><span class="status-badge ${sm[r.status]}">${ic[r.status]} ${r.status}</span></td>
+      </tr>`;
+    }, p => { reconPage = p; renderReconTable(); }, 10);
+}
+
+// ── Eligible Table ─────────────────────────────────────────────────────────
+function setEligFilter(f, el) {
+  currentEligFilter = f;
+  document.querySelectorAll('#sec-eligible .filter-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  eligPage = 1; renderEligTable();
+}
+
+function renderEligTable() {
+  const search = document.getElementById('eligSearchBox').value.toLowerCase();
+  let rows = allRows.filter(r => r.itcEligibility === 'Eligible').filter(r => {
+    const mf = currentEligFilter === 'all' || r.status === currentEligFilter;
+    const ms = !search || r.supplierName.toLowerCase().includes(search) || r.invoiceNo.toLowerCase().includes(search);
+    return mf && ms;
+  });
+  const sm = { 'Matched':'matched','Mismatch':'mismatch','Missing in 2B':'missing-2b','Missing in Books':'missing-books' };
+  const ic = { 'Matched':'✓','Mismatch':'⚠','Missing in 2B':'✗','Missing in Books':'◈' };
+  renderPagedTable(rows, 'eligTableBody', 'eligPagInfo', 'eligPageBtns', 'eligRowCount', eligPage,
+    r => `<tr class="animate-in">
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.supplierName}">${r.supplierName}</td>
+      <td class="mono">${r.invoiceNo}</td>
+      <td class="mono">${r.invoiceDate}</td>
+      <td class="mono" style="color:var(--eligible)">₹${fmt(r.taxableValueBooks||0)}</td>
+      <td class="mono">${r.igstBk!==null?'₹'+fmt(r.igstBk):'—'}</td>
+      <td class="mono">${r.cgstBk!==null?'₹'+fmt(r.cgstBk):'—'}</td>
+      <td class="mono">${r.sgstBk!==null?'₹'+fmt(r.sgstBk):'—'}</td>
+      <td class="mono" style="color:var(--eligible);font-weight:600">₹${fmt(r.totalTaxBooks||0)}</td>
+      <td><span class="status-badge ${sm[r.status]}">${ic[r.status]} ${r.status}</span></td>
+    </tr>`,
+    p => { eligPage = p; renderEligTable(); }, 10);
+}
+
+// ── Generic paged table renderer ───────────────────────────────────────────
+function renderPagedTable(rows, tbodyId, pagInfoId, pagBtnsId, countId, pg, rowFn, setPageFn, pageSize) {
+  document.getElementById(countId).textContent = rows.length + ' rows';
+  const total = rows.length, pages = Math.max(1, Math.ceil(total/pageSize));
+  if (pg > pages) pg = pages;
+  const start = (pg-1)*pageSize;
+  const pageRows = rows.slice(start, start+pageSize);
+  const tbody = document.getElementById(tbodyId);
+  const cols = tbody.closest('table').querySelectorAll('thead th').length;
+  tbody.innerHTML = pageRows.length === 0
+    ? `<tr><td colspan="${cols}"><div class="empty-state"><div class="icon">🔍</div><h3>No results</h3></div></td></tr>`
+    : pageRows.map(rowFn).join('');
+  document.getElementById(pagInfoId).textContent = `Showing ${total?start+1:0}–${Math.min(start+pageSize,total)} of ${total}`;
+  document.getElementById(pagBtnsId).innerHTML = Array.from({length:pages},(_,i)=>i+1)
+    .filter(p => p===1||p===pages||Math.abs(p-pg)<=1)
+    .reduce((acc,p,i,arr) => {
+      if (i>0&&p-arr[i-1]>1) acc.push('<span style="color:var(--muted);padding:0 4px">…</span>');
+      acc.push(`<button class="page-btn ${p===pg?'active':''}" onclick="(${setPageFn.toString()})(${p})">${p}</button>`);
+      return acc;
+    },[]).join('');
+}
+
+function fmt(n) {
+  if (n===null||n===undefined||isNaN(n)) return '—';
+  return Math.abs(n)>=100000 ? (n/100000).toFixed(2)+'L' : n.toLocaleString('en-IN',{maximumFractionDigits:0});
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+const DEMO = 'No File Uploaded';
+
+window.addEventListener('DOMContentLoaded', () => { parseAndProcess(DEMO); });
+</script>
+</body>
+</html>

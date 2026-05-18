@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TDS Reconciliation — Books vs Conso Return</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --accent2: #00ff9d;
+    --warn: #ffb800;
+    --danger: #ff4757;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --matched: #00ff9d;
+    --mismatch: #ffb800;
+    --missing-conso: #ff4757;
+    --missing-books: #a78bfa;
+    --books-src: #00d4ff;
+    --conso-src: #f97316;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans',sans-serif; font-size:13px; min-height:100vh; }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background-image: linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px), linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
+    background-size:40px 40px; pointer-events:none; z-index:0;
+  }
+  .wrapper { position:relative; z-index:1; max-width:1600px; margin:0 auto; padding:24px; }
+
+  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; padding-bottom:18px; border-bottom:1px solid var(--border); }
+  .logo { display:flex; align-items:center; gap:12px; }
+  .logo-icon { width:40px; height:40px; background:linear-gradient(135deg,#f97316,#ffb800); border-radius:8px; display:grid; place-items:center; font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px; color:#000; }
+  h1 { font-size:20px; font-weight:600; letter-spacing:-0.3px; }
+  h1 span { color:#f97316; font-family:'IBM Plex Mono',monospace; }
+  .subtitle { color:var(--muted); font-size:12px; margin-top:2px; font-family:'IBM Plex Mono',monospace; }
+  .header-right { display:flex; align-items:center; gap:10px; }
+  .upload-btn { display:flex; align-items:center; gap:8px; background:var(--surface2); border:1px solid var(--border); color:#f97316; padding:8px 16px; border-radius:6px; cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; transition:all 0.2s; }
+  .upload-btn:hover { background:rgba(249,115,22,0.1); border-color:#f97316; }
+  #csvInput { display:none; }
+
+  .section-tabs { display:flex; gap:4px; margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:4px; width:fit-content; }
+  .section-tab { padding:7px 20px; border-radius:7px; border:none; background:transparent; color:var(--muted); font-size:12px; font-family:'IBM Plex Mono',monospace; cursor:pointer; transition:all 0.2s; }
+  .section-tab.active { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+  .section-tab.active.recon { color:#f97316; }
+  .section-tab.active.deductee { color:var(--accent2); }
+  .section-tab.active.short { color:var(--danger); }
+
+  .section { display:none; }
+  .section.active { display:block; }
+
+  .kpi-grid { display:grid; gap:12px; margin-bottom:20px; }
+  .kpi-grid-5 { grid-template-columns:repeat(5,1fr); }
+  .kpi-grid-4 { grid-template-columns:repeat(4,1fr); }
+  .kpi { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; position:relative; overflow:hidden; }
+  .kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  .kpi.total::before { background:#f97316; }
+  .kpi.matched::before { background:var(--matched); }
+  .kpi.mismatch::before { background:var(--mismatch); }
+  .kpi.missing-conso::before { background:var(--missing-conso); }
+  .kpi.missing-books::before { background:var(--missing-books); }
+  .kpi.deductee-kpi::before { background:var(--accent2); }
+  .kpi.short-kpi::before { background:var(--danger); }
+  .kpi.warn-kpi::before { background:var(--warn); }
+  .kpi-label { font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+  .kpi-value { font-size:28px; font-weight:600; font-family:'IBM Plex Mono',monospace; line-height:1; }
+  .kpi.total .kpi-value { color:#f97316; }
+  .kpi.matched .kpi-value { color:var(--matched); }
+  .kpi.mismatch .kpi-value { color:var(--mismatch); }
+  .kpi.missing-conso .kpi-value { color:var(--missing-conso); }
+  .kpi.missing-books .kpi-value { color:var(--missing-books); }
+  .kpi.deductee-kpi .kpi-value { color:var(--accent2); }
+  .kpi.short-kpi .kpi-value { color:var(--danger); }
+  .kpi.warn-kpi .kpi-value { color:var(--warn); }
+  .kpi-sub { font-size:11px; color:var(--muted); margin-top:4px; font-family:'IBM Plex Mono',monospace; }
+  .kpi-amount { font-size:13px; font-weight:600; font-family:'IBM Plex Mono',monospace; margin-top:6px; }
+
+  .charts-row { display:grid; grid-template-columns:280px 1fr; gap:16px; margin-bottom:20px; }
+  .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; }
+  .card-title { font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:16px; }
+  .donut-wrap { display:flex; flex-direction:column; align-items:center; gap:16px; }
+  .legend { width:100%; display:flex; flex-direction:column; gap:8px; }
+  .legend-item { display:flex; align-items:center; justify-content:space-between; font-size:11px; }
+  .legend-left { display:flex; align-items:center; gap:8px; }
+  .legend-dot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+  .legend-count { font-family:'IBM Plex Mono',monospace; font-weight:600; }
+  .bar-group { display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+  .bar-row { display:grid; grid-template-columns:160px 1fr 130px; align-items:center; gap:12px; }
+  .bar-label { font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-track { height:20px; background:var(--surface2); border-radius:4px; overflow:hidden; display:flex; }
+  .bar-fill-conso { height:100%; background:linear-gradient(90deg,#f97316,rgba(249,115,22,0.6)); border-radius:4px 0 0 4px; transition:width 0.6s ease; }
+  .bar-fill-books { height:100%; background:linear-gradient(90deg,rgba(0,212,255,0.6),var(--accent)); transition:width 0.6s ease; }
+  .bar-values { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); text-align:right; }
+  .bar-values .diff { font-size:11px; font-weight:600; }
+  .bar-values .diff.over { color:var(--mismatch); }
+  .bar-values .diff.under { color:var(--missing-conso); }
+  .bar-values .diff.ok { color:var(--matched); }
+  .bar-legend-row { display:flex; gap:16px; margin-bottom:12px; }
+  .bar-legend-item { display:flex; align-items:center; gap:6px; font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted); }
+  .bar-legend-swatch { width:16px; height:8px; border-radius:2px; }
+
+  .split-bar-wrap { margin-bottom:20px; }
+  .split-bar-track { height:28px; background:var(--surface2); border-radius:8px; overflow:hidden; display:flex; border:1px solid var(--border); }
+  .split-bar-books { height:100%; background:linear-gradient(90deg,#00d4ff,rgba(0,212,255,0.7)); display:flex; align-items:center; justify-content:center; font-size:11px; font-family:'IBM Plex Mono',monospace; color:#000; font-weight:600; transition:width 0.8s ease; min-width:0; overflow:hidden; }
+  .split-bar-conso { height:100%; background:linear-gradient(90deg,rgba(249,115,22,0.8),#f97316); display:flex; align-items:center; justify-content:center; font-size:11px; font-family:'IBM Plex Mono',monospace; color:#fff; font-weight:600; transition:width 0.8s ease; min-width:0; overflow:hidden; }
+  .split-bar-labels { display:flex; justify-content:space-between; margin-top:6px; }
+  .split-bar-label { font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--muted); }
+
+  .reason-bars { display:flex; flex-direction:column; gap:8px; }
+  .reason-row { display:grid; grid-template-columns:200px 1fr 80px; align-items:center; gap:10px; }
+  .reason-label { font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .reason-track { height:14px; background:var(--surface2); border-radius:4px; overflow:hidden; }
+  .reason-fill { height:100%; background:linear-gradient(90deg,#ff4757,rgba(255,71,87,0.6)); border-radius:4px; transition:width 0.6s ease; }
+  .reason-amt { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--missing-conso); text-align:right; }
+
+  /* Source badge */
+  .src-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:20px; font-size:10px; font-family:'IBM Plex Mono',monospace; font-weight:600; letter-spacing:0.3px; }
+  .src-badge.books { background:rgba(0,212,255,0.12); color:var(--books-src); border:1px solid rgba(0,212,255,0.25); }
+  .src-badge.conso { background:rgba(249,115,22,0.12); color:var(--conso-src); border:1px solid rgba(249,115,22,0.25); }
+
+  .filter-row { display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .filter-tab { padding:5px 14px; border-radius:20px; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:11px; font-family:'IBM Plex Mono',monospace; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:6px; }
+  .filter-tab.active, .filter-tab:hover { background:var(--surface2); color:var(--text); border-color:#f97316; }
+  .filter-tab .dot { width:6px; height:6px; border-radius:50%; }
+  .search-box { margin-left:auto; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:5px 12px; color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:11px; outline:none; width:220px; transition:border-color 0.2s; }
+  .search-box:focus { border-color:#f97316; }
+  .search-box::placeholder { color:var(--muted); }
+  .table-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .table-header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); }
+  table { width:100%; border-collapse:collapse; }
+  thead th { padding:10px 14px; text-align:left; font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; background:var(--surface2); border-bottom:1px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; }
+  thead th:hover { color:#f97316; }
+  tbody tr { border-bottom:1px solid rgba(30,45,69,0.5); transition:background 0.1s; }
+  tbody tr:hover { background:rgba(255,255,255,0.02); }
+  tbody td { padding:10px 14px; font-size:12px; vertical-align:middle; }
+  tbody td.mono { font-family:'IBM Plex Mono',monospace; font-size:11px; }
+
+  /* Row pair highlight */
+  tbody tr.row-books { border-left:2px solid rgba(0,212,255,0.3); }
+  tbody tr.row-conso { border-left:2px solid rgba(249,115,22,0.3); border-bottom:2px solid rgba(30,45,69,0.8); }
+  tbody tr.row-books td:first-child { padding-left:12px; }
+
+  .status-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:10px; font-family:'IBM Plex Mono',monospace; font-weight:500; white-space:nowrap; }
+  .status-badge.matched { background:rgba(0,255,157,0.12); color:var(--matched); border:1px solid rgba(0,255,157,0.2); }
+  .status-badge.mismatch { background:rgba(255,184,0,0.12); color:var(--mismatch); border:1px solid rgba(255,184,0,0.2); }
+  .status-badge.missing-conso { background:rgba(255,71,87,0.12); color:var(--missing-conso); border:1px solid rgba(255,71,87,0.2); }
+  .status-badge.missing-books { background:rgba(167,139,250,0.12); color:var(--missing-books); border:1px solid rgba(167,139,250,0.2); }
+
+  .diff-cell { font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; }
+  .diff-cell.over { color:var(--mismatch); }
+  .diff-cell.under { color:var(--missing-conso); }
+  .diff-cell.ok { color:var(--matched); }
+
+  .pagination { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; border-top:1px solid var(--border); font-size:11px; color:var(--muted); font-family:'IBM Plex Mono',monospace; }
+  .page-btns { display:flex; gap:4px; }
+  .page-btn { padding:4px 10px; border-radius:4px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:11px; transition:all 0.2s; }
+  .page-btn:hover, .page-btn.active { border-color:#f97316; color:#f97316; background:rgba(249,115,22,0.08); }
+  .empty-state { padding:60px; text-align:center; color:var(--muted); }
+  .empty-state .icon { font-size:40px; margin-bottom:12px; }
+  .empty-state h3 { font-size:15px; margin-bottom:6px; color:var(--text); }
+  .toast { position:fixed; bottom:24px; right:24px; background:var(--surface2); border:1px solid #f97316; color:#f97316; padding:10px 18px; border-radius:8px; font-size:12px; font-family:'IBM Plex Mono',monospace; transform:translateY(80px); opacity:0; transition:all 0.3s; z-index:100; }
+  .toast.show { transform:translateY(0); opacity:1; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .animate-in { animation:fadeIn 0.3s ease forwards; }
+  .section-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:20px; font-size:10px; font-family:'IBM Plex Mono',monospace; background:rgba(100,116,139,0.1); color:var(--muted); border:1px solid rgba(100,116,139,0.2); }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">TDS</div>
+      <div>
+        <h1>TDS <span>Conso</span> vs Books Reconciliation</h1>
+        <div class="subtitle">// TRACES Conso File · Short Deduction · Section-wise Analysis</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <label class="upload-btn" for="csvInput">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        Upload CSV
+      </label>
+      <input type="file" id="csvInput" accept=".csv">
+    </div>
+  </header>
+
+  <div class="section-tabs">
+    <button class="section-tab active recon" onclick="switchSection('recon',this)">⇄ Reconciliation</button>
+    <button class="section-tab deductee" onclick="switchSection('deductee',this)">◎ Deductee Summary</button>
+    <button class="section-tab short" onclick="switchSection('short',this)">⚠ Short Deduction</button>
+  </div>
+
+  <!-- ══════════════ SECTION: RECONCILIATION ══════════════ -->
+  <div class="section active" id="sec-recon">
+    <div class="kpi-grid kpi-grid-5">
+      <div class="kpi total"><div class="kpi-label">Total Transactions</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-sub">unique pairs</div></div>
+      <div class="kpi matched"><div class="kpi-label">✓ Matched</div><div class="kpi-value" id="kpiMatched">—</div><div class="kpi-sub">fully reconciled</div></div>
+      <div class="kpi mismatch"><div class="kpi-label">⚠ Mismatch</div><div class="kpi-value" id="kpiMismatch">—</div><div class="kpi-sub">TDS difference</div></div>
+      <div class="kpi missing-conso"><div class="kpi-label">✗ Not in Conso</div><div class="kpi-value" id="kpiMissingConso">—</div><div class="kpi-sub">only in books</div></div>
+      <div class="kpi missing-books"><div class="kpi-label">◈ Not in Books</div><div class="kpi-value" id="kpiMissingBooks">—</div><div class="kpi-sub">only in conso</div></div>
+    </div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="card-title">// Status Breakdown</div>
+        <div class="donut-wrap">
+          <canvas id="donut" width="160" height="160"></canvas>
+          <div class="legend" id="donutLegend"></div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">// TDS Amount — Conso vs Books (Top Deductees)</div>
+        <div class="bar-legend-row">
+          <div class="bar-legend-item"><div class="bar-legend-swatch" style="background:#f97316"></div> Conso (TRACES)</div>
+          <div class="bar-legend-item"><div class="bar-legend-swatch" style="background:var(--accent)"></div> Books</div>
+        </div>
+        <div class="bar-group" id="barGroup"><div class="empty-state" style="padding:30px"><div>Upload a CSV to see comparison</div></div></div>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-tab active" onclick="setFilter('all',this)"><span class="dot" style="background:#f97316"></span> All</button>
+      <button class="filter-tab" onclick="setFilter('Matched',this)"><span class="dot" style="background:var(--matched)"></span> Matched</button>
+      <button class="filter-tab" onclick="setFilter('Mismatch',this)"><span class="dot" style="background:var(--mismatch)"></span> Mismatch</button>
+      <button class="filter-tab" onclick="setFilter('Missing in Conso',this)"><span class="dot" style="background:var(--missing-conso)"></span> Missing in Conso</button>
+      <button class="filter-tab" onclick="setFilter('Missing in Books',this)"><span class="dot" style="background:var(--missing-books)"></span> Missing in Books</button>
+      <input class="search-box" type="text" placeholder="Search deductee / PAN / voucher..." id="searchBox" oninput="renderReconTable()">
+    </div>
+
+    <div class="table-card">
+      <div class="table-header">
+        <div class="card-title" style="margin:0">// Reconciliation Detail — Row per Source</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)" id="rowCount">0 rows</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th onclick="sortBy('deducteeName')">Deductee Name</th>
+              <th onclick="sortBy('pan')">PAN</th>
+              <th onclick="sortBy('section')">Section</th>
+              <th onclick="sortBy('voucherNo')">Voucher No</th>
+              <th onclick="sortBy('txnDate')">Date</th>
+              <th>Source</th>
+              <th onclick="sortBy('paymentAmount')">Payment Amt ₹</th>
+              <th onclick="sortBy('tdsAmount')">TDS Deducted ₹</th>
+              <th onclick="sortBy('totalTax')">Total Tax ₹</th>
+              <th onclick="sortBy('tdsDiff')">Diff ₹</th>
+              <th onclick="sortBy('status')">Status</th>
+            </tr>
+          </thead>
+          <tbody id="reconTableBody">
+            <tr><td colspan="11"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3><p>Upload a CSV file to begin</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div id="reconPagInfo">Showing 0–0 of 0</div>
+        <div class="page-btns" id="reconPageBtns"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SECTION: DEDUCTEE SUMMARY ══════════════ -->
+  <div class="section" id="sec-deductee">
+    <div class="kpi-grid kpi-grid-4">
+      <div class="kpi deductee-kpi"><div class="kpi-label">Unique Deductees</div><div class="kpi-value" id="kpiDeducteeCount">—</div><div class="kpi-sub">across books + conso</div></div>
+      <div class="kpi deductee-kpi"><div class="kpi-label">Total TDS (Books)</div><div class="kpi-value" id="kpiTDSBooks">—</div><div class="kpi-sub">₹ as per books</div></div>
+      <div class="kpi deductee-kpi"><div class="kpi-label">Total TDS (Conso)</div><div class="kpi-value" id="kpiTDSConso">—</div><div class="kpi-sub">₹ as per TRACES</div></div>
+      <div class="kpi warn-kpi"><div class="kpi-label">Net Difference</div><div class="kpi-value" id="kpiTDSNetDiff">—</div><div class="kpi-sub">₹ books vs conso</div></div>
+    </div>
+
+    <!-- Section-wise TDS split bar -->
+    <div class="chart-card split-bar-wrap" style="margin-bottom:20px">
+      <div class="card-title">// TDS Distribution — Books vs Conso</div>
+      <div class="split-bar-track">
+        <div class="split-bar-books" id="splitBooks" style="width:50%">50%</div>
+        <div class="split-bar-conso" id="splitConso" style="width:50%">50%</div>
+      </div>
+      <div class="split-bar-labels">
+        <span class="split-bar-label" id="splitBooksLabel" style="color:var(--accent)">Books: —</span>
+        <span class="split-bar-label" id="splitConsoLabel" style="color:#f97316">Conso: —</span>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="card-title">// TDS by Section</div>
+        <div class="reason-bars" id="sectionBars"><div style="color:var(--muted);font-size:12px">No data</div></div>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">// Deductee-wise TDS Summary</div>
+        <div style="overflow-x:auto;max-height:300px;overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Deductee</th>
+                <th>PAN</th>
+                <th>Section</th>
+                <th>TDS Books ₹</th>
+                <th>TDS Conso ₹</th>
+                <th>Diff ₹</th>
+              </tr>
+            </thead>
+            <tbody id="deducteeMiniTable">
+              <tr><td colspan="6"><div class="empty-state" style="padding:20px"><div>No data</div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SECTION: SHORT DEDUCTION ══════════════ -->
+  <div class="section" id="sec-short">
+    <div class="kpi-grid kpi-grid-4">
+      <div class="kpi short-kpi"><div class="kpi-label">Short Deduction Cases</div><div class="kpi-value" id="kpiShortCount">—</div><div class="kpi-sub">books &lt; conso or missing</div></div>
+      <div class="kpi short-kpi"><div class="kpi-label">Short TDS Amount</div><div class="kpi-value" id="kpiShortAmt">—</div><div class="kpi-sub">₹ potential liability</div></div>
+      <div class="kpi missing-conso"><div class="kpi-label">Not Filed in Conso</div><div class="kpi-value" id="kpiNotFiled">—</div><div class="kpi-sub">₹ TDS not remitted</div></div>
+      <div class="kpi warn-kpi"><div class="kpi-label">Mismatch Cases</div><div class="kpi-value" id="kpiShortMismatch">—</div><div class="kpi-sub">value differs</div></div>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-tab active" onclick="setShortFilter('all',this)"><span class="dot" style="background:#f97316"></span> All Issues</button>
+      <button class="filter-tab" onclick="setShortFilter('Mismatch',this)"><span class="dot" style="background:var(--mismatch)"></span> Mismatch</button>
+      <button class="filter-tab" onclick="setShortFilter('Missing in Conso',this)"><span class="dot" style="background:var(--missing-conso)"></span> Missing in Conso</button>
+      <button class="filter-tab" onclick="setShortFilter('Missing in Books',this)"><span class="dot" style="background:var(--missing-books)"></span> Missing in Books</button>
+      <input class="search-box" type="text" placeholder="Search deductee / PAN..." id="shortSearchBox" oninput="renderShortTable()">
+    </div>
+
+    <div class="table-card">
+      <div class="table-header">
+        <div class="card-title" style="margin:0">// Short Deduction &amp; Discrepancy Register</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--danger)" id="shortRowCount">0 rows</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Deductee Name</th>
+              <th>PAN</th>
+              <th>Section</th>
+              <th>Voucher No</th>
+              <th>Date</th>
+              <th>Payment Amt ₹</th>
+              <th>TDS (Books) ₹</th>
+              <th>TDS (Conso) ₹</th>
+              <th>Short / Diff ₹</th>
+              <th>Status</th>
+              <th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody id="shortTableBody">
+            <tr><td colspan="11"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <div id="shortPagInfo">Showing 0–0 of 0</div>
+        <div class="page-btns" id="shortPageBtns"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /wrapper -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allPairs = [];      // one entry per unique PAN+Voucher pair (for KPIs/charts)
+let allFlatRows = [];   // TWO rows per pair (books + conso), for the flat table
+let currentFilter = 'all';
+let currentShortFilter = 'all';
+let sortKey = '', sortDir = 1;
+let reconPage = 1, shortPage = 1;
+const PAGE = 12;
+
+function switchSection(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.section-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+document.getElementById('csvInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try { parseAndProcess(ev.target.result); showToast('✓ Loaded: ' + file.name); }
+    catch(err) { showToast('✗ Error: ' + err.message); }
+  };
+  reader.readAsText(file);
+});
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).filter(l => l.trim()).map(line => {
+    // handle quoted commas
+    const vals = [];
+    let cur = '', inQ = false;
+    for (let c of line) {
+      if (c === '"') inQ = !inQ;
+      else if (c === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+      else cur += c;
+    }
+    vals.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] || '').trim());
+    return obj;
+  });
+}
+
+function n(v) { const x = parseFloat(v); return isNaN(x) ? 0 : x; }
+
+function parseAndProcess(csvText) {
+  const rows = parseCSV(csvText);
+  const groups = {};
+  rows.forEach(r => {
+    const key = `${r['PAN']}|${r['Voucher No']}`;
+    if (!groups[key]) groups[key] = {};
+    const src = r['Source'];
+    if (src === 'Books') groups[key]['Books'] = r;
+    else if (src === 'Conso') groups[key]['Conso'] = r;
+  });
+
+  allPairs = [];
+  allFlatRows = [];
+
+  Object.entries(groups).forEach(([key, g]) => {
+    const bk = g['Books'], cn = g['Conso'];
+    const ref = bk || cn;
+
+    const tdsBooks = bk ? n(bk['TDS Amount']) : null;
+    const tdsConso = cn ? n(cn['TDS Amount']) : null;
+    const totalTaxBooks = bk ? n(bk['Total Tax']) : null;
+    const totalTaxConso = cn ? n(cn['Total Tax']) : null;
+    const payBooks = bk ? n(bk['Payment Amount']) : null;
+    const payConso = cn ? n(cn['Payment Amount']) : null;
+
+    let status;
+    if (bk && cn) {
+      const diff = Math.abs((totalTaxBooks||0) - (totalTaxConso||0));
+      status = diff < 1 ? 'Matched' : 'Mismatch';
+    } else if (!cn) { status = 'Missing in Conso'; }
+    else { status = 'Missing in Books'; }
+
+    const tdsDiff = (tdsBooks !== null && tdsConso !== null) ? tdsBooks - tdsConso : null;
+
+    const pair = {
+      pan: ref['PAN'], deducteeName: ref['Deductee Name'],
+      section: ref['Section'], voucherNo: ref['Voucher No'],
+      txnDate: ref['Transaction Date'],
+      paymentAmountBooks: payBooks, paymentAmountConso: payConso,
+      tdsBooks, tdsConso, totalTaxBooks, totalTaxConso, tdsDiff, status,
+      natureOfPayment: ref['Nature of Payment'],
+      remarks: (bk && bk['Remarks']) || (cn && cn['Remarks']) || '',
+    };
+    allPairs.push(pair);
+
+    // Flat rows — one per source present
+    if (bk) allFlatRows.push({ ...pair, rowSource: 'Books', tdsAmount: tdsBooks, totalTax: totalTaxBooks, paymentAmount: payBooks });
+    if (cn) allFlatRows.push({ ...pair, rowSource: 'Conso', tdsAmount: tdsConso, totalTax: totalTaxConso, paymentAmount: payConso });
+  });
+
+  updateAll();
+}
+
+function updateAll() {
+  updateReconKPIs();
+  renderDonut();
+  renderBars();
+  renderReconTable();
+  updateDeducteeSection();
+  updateShortSection();
+}
+
+// ── Recon KPIs ─────────────────────────────────────────────────────────────
+function updateReconKPIs() {
+  const c = { Matched:0, Mismatch:0, 'Missing in Conso':0, 'Missing in Books':0 };
+  allPairs.forEach(r => c[r.status]++);
+  document.getElementById('kpiTotal').textContent = allPairs.length;
+  document.getElementById('kpiMatched').textContent = c['Matched'];
+  document.getElementById('kpiMismatch').textContent = c['Mismatch'];
+  document.getElementById('kpiMissingConso').textContent = c['Missing in Conso'];
+  document.getElementById('kpiMissingBooks').textContent = c['Missing in Books'];
+}
+
+// ── Deductee Section ───────────────────────────────────────────────────────
+function updateDeducteeSection() {
+  const deductees = {};
+  allPairs.forEach(r => {
+    const k = r.pan;
+    if (!deductees[k]) deductees[k] = { name: r.deducteeName, pan: r.pan, section: r.section, bk: 0, cn: 0 };
+    deductees[k].bk += r.tdsBooks || 0;
+    deductees[k].cn += r.tdsConso || 0;
+  });
+  const dArr = Object.values(deductees);
+  const totalBk = dArr.reduce((s,d) => s+d.bk, 0);
+  const totalCn = dArr.reduce((s,d) => s+d.cn, 0);
+  const netDiff = totalBk - totalCn;
+
+  document.getElementById('kpiDeducteeCount').textContent = dArr.length;
+  document.getElementById('kpiTDSBooks').textContent = '₹' + fmt(totalBk);
+  document.getElementById('kpiTDSConso').textContent = '₹' + fmt(totalCn);
+  document.getElementById('kpiTDSNetDiff').textContent = (netDiff >= 0 ? '+' : '') + '₹' + fmt(Math.abs(netDiff));
+
+  const total = totalBk + totalCn || 1;
+  const bkPct = (totalBk / total * 100).toFixed(1);
+  const cnPct = (totalCn / total * 100).toFixed(1);
+  document.getElementById('splitBooks').style.width = bkPct + '%';
+  document.getElementById('splitBooks').textContent = bkPct > 8 ? bkPct + '%' : '';
+  document.getElementById('splitConso').style.width = cnPct + '%';
+  document.getElementById('splitConso').textContent = cnPct > 8 ? cnPct + '%' : '';
+  document.getElementById('splitBooksLabel').textContent = 'Books: ₹' + fmt(totalBk);
+  document.getElementById('splitConsoLabel').textContent = 'Conso: ₹' + fmt(totalCn);
+
+  // Section bars
+  const secMap = {};
+  allFlatRows.forEach(r => {
+    const k = r.section || 'Unknown';
+    if (!secMap[k]) secMap[k] = 0;
+    secMap[k] += r.tdsAmount || 0;
+  });
+  const maxS = Math.max(...Object.values(secMap)) || 1;
+  document.getElementById('sectionBars').innerHTML = Object.entries(secMap)
+    .sort((a,b) => b[1]-a[1])
+    .map(([sec, amt]) => `
+      <div class="reason-row">
+        <div class="reason-label" title="${sec}">${sec}</div>
+        <div class="reason-track"><div class="reason-fill" style="width:${(amt/maxS*100).toFixed(1)}%;background:linear-gradient(90deg,#f97316,rgba(249,115,22,0.5))"></div></div>
+        <div class="reason-amt" style="color:#f97316">₹${fmt(amt)}</div>
+      </div>`).join('') || '<div style="color:var(--muted);font-size:12px">No data</div>';
+
+  // Mini deductee table
+  document.getElementById('deducteeMiniTable').innerHTML = dArr
+    .sort((a,b) => (b.bk+b.cn)-(a.bk+a.cn))
+    .map(d => {
+      const diff = d.bk - d.cn;
+      const dc = diff > 0.5 ? 'over' : diff < -0.5 ? 'under' : 'ok';
+      const ds = Math.abs(diff) < 1 ? '<span style="color:var(--matched)">✓</span>' : (diff>0?'+':'')+fmt(diff);
+      return `<tr>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${d.name}">${d.name}</td>
+        <td class="mono" style="font-size:10px">${d.pan}</td>
+        <td><span class="section-badge">${d.section}</span></td>
+        <td class="mono" style="color:var(--accent)">₹${fmt(d.bk)}</td>
+        <td class="mono" style="color:#f97316">₹${fmt(d.cn)}</td>
+        <td class="mono diff-cell ${dc}">${ds}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6"><div class="empty-state" style="padding:20px">No data</div></td></tr>';
+}
+
+// ── Short Deduction Section ────────────────────────────────────────────────
+function updateShortSection() {
+  const issues = allPairs.filter(r => r.status !== 'Matched');
+  const shortAmt = issues.filter(r => r.status === 'Mismatch' && r.tdsDiff !== null && r.tdsDiff < 0)
+    .reduce((s,r) => s + Math.abs(r.tdsDiff||0), 0);
+  const notFiledAmt = issues.filter(r => r.status === 'Missing in Conso')
+    .reduce((s,r) => s + (r.tdsBooks||0), 0);
+
+  document.getElementById('kpiShortCount').textContent = issues.length;
+  document.getElementById('kpiShortAmt').textContent = '₹' + fmt(shortAmt);
+  document.getElementById('kpiNotFiled').textContent = '₹' + fmt(notFiledAmt);
+  document.getElementById('kpiShortMismatch').textContent = issues.filter(r => r.status === 'Mismatch').length;
+  shortPage = 1; renderShortTable();
+}
+
+// ── Donut ──────────────────────────────────────────────────────────────────
+function renderDonut() {
+  const counts = { Matched:0, Mismatch:0, 'Missing in Conso':0, 'Missing in Books':0 };
+  allPairs.forEach(r => counts[r.status]++);
+  const total = allPairs.length || 1;
+  const data = [
+    { label:'Matched', count:counts['Matched'], color:'#00ff9d' },
+    { label:'Mismatch', count:counts['Mismatch'], color:'#ffb800' },
+    { label:'Missing in Conso', count:counts['Missing in Conso'], color:'#ff4757' },
+    { label:'Missing in Books', count:counts['Missing in Books'], color:'#a78bfa' },
+  ];
+  const canvas = document.getElementById('donut');
+  const ctx = canvas.getContext('2d');
+  const size = 160; canvas.width = size; canvas.height = size;
+  const cx = size/2, cy = size/2, r = 65, inner = 42;
+  ctx.clearRect(0,0,size,size);
+  let start = -Math.PI/2;
+  data.forEach(d => {
+    if (!d.count) return;
+    const angle = (d.count/total) * 2 * Math.PI;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,start,start+angle); ctx.closePath();
+    ctx.fillStyle = d.color; ctx.fill(); start += angle;
+  });
+  ctx.beginPath(); ctx.arc(cx,cy,inner,0,2*Math.PI); ctx.fillStyle='#111827'; ctx.fill();
+  ctx.fillStyle='#e2e8f0'; ctx.font='bold 22px IBM Plex Mono'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(allPairs.length,cx,cy-6); ctx.font='10px IBM Plex Mono'; ctx.fillStyle='#64748b'; ctx.fillText('entries',cx,cy+12);
+  document.getElementById('donutLegend').innerHTML = data.map(d => `
+    <div class="legend-item">
+      <div class="legend-left"><div class="legend-dot" style="background:${d.color}"></div><span style="color:#94a3b8">${d.label}</span></div>
+      <span class="legend-count" style="color:${d.color}">${d.count}</span>
+    </div>`).join('');
+}
+
+// ── Bar chart ──────────────────────────────────────────────────────────────
+function renderBars() {
+  const deductees = {};
+  allPairs.forEach(r => {
+    const k = r.deducteeName;
+    if (!deductees[k]) deductees[k] = { cn:0, bk:0 };
+    if (r.tdsConso !== null) deductees[k].cn += r.tdsConso;
+    if (r.tdsBooks !== null) deductees[k].bk += r.tdsBooks;
+  });
+  const sorted = Object.entries(deductees).sort((a,b)=>(b[1].cn||b[1].bk)-(a[1].cn||a[1].bk)).slice(0,6);
+  const maxVal = Math.max(...sorted.flatMap(([,v])=>[v.cn,v.bk]),1);
+  document.getElementById('barGroup').innerHTML = sorted.map(([name,v]) => {
+    const wCn = (v.cn/maxVal*100).toFixed(1), wBk = (v.bk/maxVal*100).toFixed(1);
+    const diff = v.bk - v.cn;
+    const dc = diff > 0.5 ? 'over' : diff < -0.5 ? 'under' : 'ok';
+    const ds = Math.abs(diff)<1 ? '✓ Match' : (diff>0?'+':'')+'₹'+fmt(diff);
+    return `<div class="bar-row">
+      <div class="bar-label" title="${name}">${name.split(' ').slice(0,3).join(' ')}</div>
+      <div class="bar-track">
+        <div class="bar-fill-conso" style="width:${wCn}%"></div>
+        <div style="width:2px;background:var(--bg)"></div>
+        <div class="bar-fill-books" style="width:${wBk}%"></div>
+      </div>
+      <div class="bar-values">
+        <div style="color:#f97316">₹${fmt(v.cn)}</div>
+        <div style="color:var(--accent)">₹${fmt(v.bk)}</div>
+        <div class="diff ${dc}">${ds}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Reconciliation Table (flat — two rows per pair) ────────────────────────
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('#sec-recon .filter-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  reconPage = 1; renderReconTable();
+}
+
+function sortBy(key) {
+  if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+  renderReconTable();
+}
+
+function renderReconTable() {
+  const search = document.getElementById('searchBox').value.toLowerCase();
+  // Filter at pair level, then expand to flat rows
+  let filteredPairs = allPairs.filter(p => {
+    const mf = currentFilter === 'all' || p.status === currentFilter;
+    const ms = !search || p.deducteeName.toLowerCase().includes(search) || p.pan.toLowerCase().includes(search) || p.voucherNo.toLowerCase().includes(search);
+    return mf && ms;
+  });
+  if (sortKey) filteredPairs.sort((a,b) => {
+    const av=a[sortKey], bv=b[sortKey];
+    if(av===null||av===undefined) return 1;
+    if(bv===null||bv===undefined) return -1;
+    return av>bv?sortDir:av<bv?-sortDir:0;
+  });
+
+  // Build flat display rows from filtered pairs
+  let displayRows = [];
+  filteredPairs.forEach(p => {
+    const hasBk = p.tdsBooks !== null;
+    const hasCn = p.tdsConso !== null;
+    if (hasBk) displayRows.push({ ...p, rowSource: 'Books', rowAmt: p.tdsBooks, rowTotalTax: p.totalTaxBooks, rowPay: p.paymentAmountBooks, isPairFirst: true });
+    if (hasCn) displayRows.push({ ...p, rowSource: 'Conso', rowAmt: p.tdsConso, rowTotalTax: p.totalTaxConso, rowPay: p.paymentAmountConso, isPairFirst: !hasBk });
+  });
+
+  document.getElementById('rowCount').textContent = displayRows.length + ' rows (' + filteredPairs.length + ' pairs)';
+  const total = displayRows.length, pages = Math.max(1, Math.ceil(total/PAGE));
+  if (reconPage > pages) reconPage = pages;
+  const start = (reconPage-1)*PAGE;
+  const pageRows = displayRows.slice(start, start+PAGE);
+
+  const sm = { 'Matched':'matched','Mismatch':'mismatch','Missing in Conso':'missing-conso','Missing in Books':'missing-books' };
+  const ic = { 'Matched':'✓','Mismatch':'⚠','Missing in Conso':'✗','Missing in Books':'◈' };
+
+  const tbody = document.getElementById('reconTableBody');
+  tbody.innerHTML = pageRows.length === 0
+    ? `<tr><td colspan="11"><div class="empty-state"><div class="icon">🔍</div><h3>No results</h3></div></td></tr>`
+    : pageRows.map(r => {
+        const isBooks = r.rowSource === 'Books';
+        const rowClass = isBooks ? 'row-books animate-in' : 'row-conso animate-in';
+        const ds = r.tdsDiff !== null ? (Math.abs(r.tdsDiff)<1 ? '—' : (r.tdsDiff>0?'+':'')+'₹'+fmt(r.tdsDiff)) : '—';
+        const dc = r.tdsDiff !== null ? (r.tdsDiff>0.5?'over':r.tdsDiff<-0.5?'under':'ok') : '';
+        return `<tr class="${rowClass}">
+          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.deducteeName}">${r.deducteeName}</td>
+          <td class="mono" style="font-size:10px">${r.pan}</td>
+          <td><span class="section-badge">${r.section}</span></td>
+          <td class="mono">${r.voucherNo}</td>
+          <td class="mono">${r.txnDate}</td>
+          <td><span class="src-badge ${isBooks?'books':'conso'}">${isBooks?'📘 Books':'📄 Conso'}</span></td>
+          <td class="mono">${r.rowPay!==null?'₹'+fmt(r.rowPay):'<span style="color:var(--muted)">—</span>'}</td>
+          <td class="mono" style="color:${isBooks?'var(--accent)':'#f97316'}">${r.rowAmt!==null?'₹'+fmt(r.rowAmt):'<span style="color:var(--muted)">—</span>'}</td>
+          <td class="mono">${r.rowTotalTax!==null?'₹'+fmt(r.rowTotalTax):'<span style="color:var(--muted)">—</span>'}</td>
+          <td class="diff-cell ${isBooks?dc:''}">${isBooks&&r.tdsDiff!==null?ds:'<span style="color:var(--muted)">—</span>'}</td>
+          <td>${isBooks?`<span class="status-badge ${sm[r.status]}">${ic[r.status]} ${r.status}</span>`:'<span style="color:var(--muted);font-size:10px">↑ pair above</span>'}</td>
+        </tr>`;
+      }).join('');
+
+  document.getElementById('reconPagInfo').textContent = `Showing ${total?start+1:0}–${Math.min(start+PAGE,total)} of ${total}`;
+  document.getElementById('reconPageBtns').innerHTML = pagBtns(pages, reconPage, p => { reconPage = p; renderReconTable(); });
+}
+
+// ── Short Deduction Table ──────────────────────────────────────────────────
+function setShortFilter(f, el) {
+  currentShortFilter = f;
+  document.querySelectorAll('#sec-short .filter-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  shortPage = 1; renderShortTable();
+}
+
+function renderShortTable() {
+  const search = document.getElementById('shortSearchBox').value.toLowerCase();
+  let rows = allPairs.filter(r => r.status !== 'Matched').filter(r => {
+    const mf = currentShortFilter === 'all' || r.status === currentShortFilter;
+    const ms = !search || r.deducteeName.toLowerCase().includes(search) || r.pan.toLowerCase().includes(search);
+    return mf && ms;
+  });
+
+  document.getElementById('shortRowCount').textContent = rows.length + ' rows';
+  const total = rows.length, pages = Math.max(1, Math.ceil(total/PAGE));
+  if (shortPage > pages) shortPage = pages;
+  const start = (shortPage-1)*PAGE;
+  const pageRows = rows.slice(start, start+PAGE);
+
+  const sm = { 'Mismatch':'mismatch','Missing in Conso':'missing-conso','Missing in Books':'missing-books' };
+  const ic = { 'Mismatch':'⚠','Missing in Conso':'✗','Missing in Books':'◈' };
+
+  document.getElementById('shortTableBody').innerHTML = pageRows.length === 0
+    ? `<tr><td colspan="11"><div class="empty-state"><div class="icon">🔍</div><h3>No issues found</h3></div></td></tr>`
+    : pageRows.map(r => {
+        const diff = r.tdsDiff !== null ? r.tdsDiff : (r.tdsBooks || (-(r.tdsConso||0)));
+        const ds = (diff>0?'+':'')+'₹'+fmt(Math.abs(diff));
+        const dc = diff < -0.5 ? 'under' : diff > 0.5 ? 'over' : 'ok';
+        return `<tr class="animate-in">
+          <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.deducteeName}">${r.deducteeName}</td>
+          <td class="mono" style="font-size:10px">${r.pan}</td>
+          <td><span class="section-badge">${r.section}</span></td>
+          <td class="mono">${r.voucherNo}</td>
+          <td class="mono">${r.txnDate}</td>
+          <td class="mono">₹${fmt(r.paymentAmountBooks||r.paymentAmountConso||0)}</td>
+          <td class="mono" style="color:var(--accent)">${r.tdsBooks!==null?'₹'+fmt(r.tdsBooks):'<span style="color:var(--muted)">—</span>'}</td>
+          <td class="mono" style="color:#f97316">${r.tdsConso!==null?'₹'+fmt(r.tdsConso):'<span style="color:var(--muted)">—</span>'}</td>
+          <td class="diff-cell ${dc}">${ds}</td>
+          <td><span class="status-badge ${sm[r.status]}">${ic[r.status]} ${r.status}</span></td>
+          <td style="font-size:10px;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.remarks||'—'}</td>
+        </tr>`;
+      }).join('');
+
+  document.getElementById('shortPagInfo').textContent = `Showing ${total?start+1:0}–${Math.min(start+PAGE,total)} of ${total}`;
+  document.getElementById('shortPageBtns').innerHTML = pagBtns(pages, shortPage, p => { shortPage = p; renderShortTable(); });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function pagBtns(pages, current, setPageFn) {
+  return Array.from({length:pages},(_,i)=>i+1)
+    .filter(p => p===1||p===pages||Math.abs(p-current)<=1)
+    .reduce((acc,p,i,arr) => {
+      if (i>0&&p-arr[i-1]>1) acc.push('<span style="color:var(--muted);padding:0 4px">…</span>');
+      acc.push(`<button class="page-btn ${p===current?'active':''}" onclick="(${setPageFn.toString()})(${p})">${p}</button>`);
+      return acc;
+    },[]).join('');
+}
+
+function fmt(n) {
+  if (n===null||n===undefined||isNaN(n)) return '—';
+  return Math.abs(n)>=100000 ? (n/100000).toFixed(2)+'L' : n.toLocaleString('en-IN',{maximumFractionDigits:0});
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Demo data on load ──────────────────────────────────────────────────────
+const DEMO = `No File Uploaded`;
+
+window.addEventListener('DOMContentLoaded', () => { parseAndProcess(DEMO); });
+</script>
+</body>
+</html>
