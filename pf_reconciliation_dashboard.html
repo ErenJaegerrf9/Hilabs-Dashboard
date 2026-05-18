@@ -166,7 +166,7 @@
       <div class="logo-icon">PF</div>
       <div>
         <h1>PF <span>Recon</span> — Books vs ECR</h1>
-        <div class="subtitle">// Provident Fund · Books vs ECR challan · employee-level reconciliation</div>
+        <div class="subtitle">// Provident Fund · Books vs ECR · employee-level reconciliation</div>
       </div>
     </div>
     <div class="header-right">
@@ -300,11 +300,10 @@
               <th>EDLI ₹</th>
               <th>Admin ₹</th>
               <th>Total PF ₹</th>
-              <th>Challan No</th>
               <th>Status</th>
             </tr></thead>
             <tbody id="compTableBody">
-              <tr><td colspan="11"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3></div></td></tr>
+              <tr><td colspan="10"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -494,7 +493,6 @@ function parseAndProcess(csvText) {
       employeeName: ref['Employee_Name'] || '—',
       estCode:      ref['Establishment_Code'] || '—',
       month:        ref['Month'],
-      challanNo:    (bk||ecr)['Challan_No'] || '—',
       // books
       wagesBooks, epfBooks, epsBooks, edliBooks, adminBooks, totalPFBooks,
       // ecr
@@ -702,7 +700,6 @@ function renderCompTable() {
       <td class="mono">₹${fmt(r.edliBooks||r.edliECR||0)}</td>
       <td class="mono">₹${fmt(r.adminBooks||r.adminECR||0)}</td>
       <td class="mono" style="color:var(--compliant);font-weight:600">₹${fmt(r.totalPFBooks||r.totalPFECR||0)}</td>
-      <td class="mono" style="color:var(--muted)">${r.challanNo}</td>
       <td><span class="status-badge ${sm[r.status]||'matched'}">${ic[r.status]||'✓'} ${r.status}</span></td>
     </tr>`, p => { compPage = p; renderCompTable(); }, 10);
 }
