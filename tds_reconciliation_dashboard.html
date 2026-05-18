@@ -4,18 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TDS Reconciliation — Books vs Conso Return</title>
-  <!-- Browser Tab Icon -->
-<link rel="icon" type="image/svg+xml"
-href='data:image/svg+xml,
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-<rect width="100" height="100" rx="20" fill="%2300d4ff"/>
-<text x="50" y="62"
-font-size="52"
-text-anchor="middle"
-fill="black"
-font-family="Arial"
-font-weight="bold">TDS</text>
-</svg>'>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
   :root {
@@ -183,35 +171,6 @@ font-weight="bold">TDS</text>
 </style>
 </head>
 <body>
-  <a href="index.html" class="home-btn">
-  ← Back to Home
-</a>
-
-<style>
-.home-btn{
-  position:fixed;
-  top:20px;
-  right:20px;
-  z-index:9999;
-  text-decoration:none;
-  background:#111827;
-  color:#00d4ff;
-  border:1px solid #1e2d45;
-  padding:10px 16px;
-  border-radius:10px;
-  font-family:'IBM Plex Mono', monospace;
-  font-size:12px;
-  font-weight:600;
-  transition:all .25s ease;
-  box-shadow:0 4px 18px rgba(0,0,0,.25);
-}
-
-.home-btn:hover{
-  background:#00d4ff;
-  color:#000;
-  transform:translateY(-2px);
-}
-</style>
 <div class="wrapper">
 
   <header>
@@ -271,7 +230,7 @@ font-weight="bold">TDS</text>
       <button class="filter-tab" onclick="setFilter('Mismatch',this)"><span class="dot" style="background:var(--mismatch)"></span> Mismatch</button>
       <button class="filter-tab" onclick="setFilter('Missing in Conso',this)"><span class="dot" style="background:var(--missing-conso)"></span> Missing in Conso</button>
       <button class="filter-tab" onclick="setFilter('Missing in Books',this)"><span class="dot" style="background:var(--missing-books)"></span> Missing in Books</button>
-      <input class="search-box" type="text" placeholder="Search deductee / PAN / voucher..." id="searchBox" oninput="renderReconTable()">
+      <input class="search-box" type="text" placeholder="Search deductee / PAN..." id="searchBox" oninput="renderReconTable()">
     </div>
 
     <div class="table-card">
@@ -286,7 +245,6 @@ font-weight="bold">TDS</text>
               <th onclick="sortBy('deducteeName')">Deductee Name</th>
               <th onclick="sortBy('pan')">PAN</th>
               <th onclick="sortBy('section')">Section</th>
-              <th onclick="sortBy('voucherNo')">Voucher No</th>
               <th onclick="sortBy('txnDate')">Date</th>
               <th>Source</th>
               <th onclick="sortBy('paymentAmount')">Payment Amt ₹</th>
@@ -297,7 +255,7 @@ font-weight="bold">TDS</text>
             </tr>
           </thead>
           <tbody id="reconTableBody">
-            <tr><td colspan="11"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3><p>Upload a CSV file to begin</p></div></td></tr>
+            <tr><td colspan="10"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3><p>Upload a CSV file to begin</p></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -387,7 +345,6 @@ font-weight="bold">TDS</text>
               <th>Deductee Name</th>
               <th>PAN</th>
               <th>Section</th>
-              <th>Voucher No</th>
               <th>Date</th>
               <th>Payment Amt ₹</th>
               <th>TDS (Books) ₹</th>
@@ -398,7 +355,7 @@ font-weight="bold">TDS</text>
             </tr>
           </thead>
           <tbody id="shortTableBody">
-            <tr><td colspan="11"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3></div></td></tr>
+            <tr><td colspan="10"><div class="empty-state"><div class="icon">📂</div><h3>No data loaded</h3></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -414,7 +371,7 @@ font-weight="bold">TDS</text>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-let allPairs = [];      // one entry per unique PAN+Voucher pair (for KPIs/charts)
+let allPairs = [];      // one entry per unique PAN+Section+Date pair (for KPIs/charts)
 let allFlatRows = [];   // TWO rows per pair (books + conso), for the flat table
 let currentFilter = 'all';
 let currentShortFilter = 'all';
@@ -465,7 +422,7 @@ function parseAndProcess(csvText) {
   const rows = parseCSV(csvText);
   const groups = {};
   rows.forEach(r => {
-    const key = `${r['PAN']}|${r['Voucher No']}`;
+    const key = `${r['PAN']}|${r['Section']}|${r['Transaction Date']}`;
     if (!groups[key]) groups[key] = {};
     const src = r['Source'];
     if (src === 'Books') groups[key]['Books'] = r;
@@ -497,7 +454,7 @@ function parseAndProcess(csvText) {
 
     const pair = {
       pan: ref['PAN'], deducteeName: ref['Deductee Name'],
-      section: ref['Section'], voucherNo: ref['Voucher No'],
+      section: ref['Section'],
       txnDate: ref['Transaction Date'],
       paymentAmountBooks: payBooks, paymentAmountConso: payConso,
       tdsBooks, tdsConso, totalTaxBooks, totalTaxConso, tdsDiff, status,
@@ -696,7 +653,7 @@ function renderReconTable() {
   // Filter at pair level, then expand to flat rows
   let filteredPairs = allPairs.filter(p => {
     const mf = currentFilter === 'all' || p.status === currentFilter;
-    const ms = !search || p.deducteeName.toLowerCase().includes(search) || p.pan.toLowerCase().includes(search) || p.voucherNo.toLowerCase().includes(search);
+    const ms = !search || p.deducteeName.toLowerCase().includes(search) || p.pan.toLowerCase().includes(search);
     return mf && ms;
   });
   if (sortKey) filteredPairs.sort((a,b) => {
@@ -726,7 +683,7 @@ function renderReconTable() {
 
   const tbody = document.getElementById('reconTableBody');
   tbody.innerHTML = pageRows.length === 0
-    ? `<tr><td colspan="11"><div class="empty-state"><div class="icon">🔍</div><h3>No results</h3></div></td></tr>`
+    ? `<tr><td colspan="10"><div class="empty-state"><div class="icon">🔍</div><h3>No results</h3></div></td></tr>`
     : pageRows.map(r => {
         const isBooks = r.rowSource === 'Books';
         const rowClass = isBooks ? 'row-books animate-in' : 'row-conso animate-in';
@@ -736,7 +693,6 @@ function renderReconTable() {
           <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.deducteeName}">${r.deducteeName}</td>
           <td class="mono" style="font-size:10px">${r.pan}</td>
           <td><span class="section-badge">${r.section}</span></td>
-          <td class="mono">${r.voucherNo}</td>
           <td class="mono">${r.txnDate}</td>
           <td><span class="src-badge ${isBooks?'books':'conso'}">${isBooks?'📘 Books':'📄 Conso'}</span></td>
           <td class="mono">${r.rowPay!==null?'₹'+fmt(r.rowPay):'<span style="color:var(--muted)">—</span>'}</td>
@@ -777,7 +733,7 @@ function renderShortTable() {
   const ic = { 'Mismatch':'⚠','Missing in Conso':'✗','Missing in Books':'◈' };
 
   document.getElementById('shortTableBody').innerHTML = pageRows.length === 0
-    ? `<tr><td colspan="11"><div class="empty-state"><div class="icon">🔍</div><h3>No issues found</h3></div></td></tr>`
+    ? `<tr><td colspan="10"><div class="empty-state"><div class="icon">🔍</div><h3>No issues found</h3></div></td></tr>`
     : pageRows.map(r => {
         const diff = r.tdsDiff !== null ? r.tdsDiff : (r.tdsBooks || (-(r.tdsConso||0)));
         const ds = (diff>0?'+':'')+'₹'+fmt(Math.abs(diff));
@@ -786,7 +742,6 @@ function renderShortTable() {
           <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.deducteeName}">${r.deducteeName}</td>
           <td class="mono" style="font-size:10px">${r.pan}</td>
           <td><span class="section-badge">${r.section}</span></td>
-          <td class="mono">${r.voucherNo}</td>
           <td class="mono">${r.txnDate}</td>
           <td class="mono">₹${fmt(r.paymentAmountBooks||r.paymentAmountConso||0)}</td>
           <td class="mono" style="color:var(--accent)">${r.tdsBooks!==null?'₹'+fmt(r.tdsBooks):'<span style="color:var(--muted)">—</span>'}</td>
